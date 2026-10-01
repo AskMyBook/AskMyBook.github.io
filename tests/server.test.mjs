@@ -117,7 +117,7 @@ MODE = {};
   let up = false; for (let i = 0; i < 40 && !up; i++) { await new Promise(r => setTimeout(r, 150)); try { up = (await fetch(`http://127.0.0.1:${port}/v1/health`)).ok; } catch {} }
   ok("server starts (node server/node.mjs) and answers /v1/health", up);
   if (up) { const h = await (await fetch(`http://127.0.0.1:${port}/v1/health`)).json(); ok("server without keys: chat off, tts null + warning (site falls back to in-browser voice)", h.chat === false && h.tts === null && h.ttsWarnings.length > 0);
-    const idx = await fetch(`http://127.0.0.1:${port}/`); ok("server also serves the site (index.html)", idx.ok && /Smart Study/.test(await idx.text()));
+    const idx = await fetch(`http://127.0.0.1:${port}/`); ok("server also serves the site (index.html)", idx.ok && /AskMyBook/.test(await idx.text()));
     const env = await fetch(`http://127.0.0.1:${port}/server/.env.example`); ok("server/ folder is never served", env.status === 404); }
   p.kill(); }
 

@@ -1,4 +1,4 @@
-/* ===== Smart Study — حبر أزرق + هايلايتر أصفر ===== */
+/* ===== AskMyBook — حبر أزرق + هايلايتر أصفر ===== */
 :root{
   --bg:#f4f6fb;--card:#ffffff;--card2:#f8f9fd;--txt:#161b33;--muted:#5b6385;--line:#e1e5f0;
   --on:#ffffff;--main:#3346c8;--main2:#4f63e0;--mainh:#2836a6;--soft:#eceffd;--acc:#f2b705;--acc2:#f97316;--danger:#dc2626;
@@ -504,7 +504,7 @@ html[dir=ltr] #prev svg,html[dir=ltr] #next svg{transform:scaleX(-1)}
 /* عناصر للمطوّر/صاحب الموقع بس — بتظهر مع ?dev=1 أو devSettings:true في config.js */
 html:not(.dev) .adv{display:none !important}
 
-/* ===== Smart Study: الهيدر وزرار الفاتح/الغامق ===== */
+/* ===== AskMyBook: الهيدر وزرار الفاتح/الغامق ===== */
 header{padding-top:calc(10px + env(safe-area-inset-top,0px))}
 .brand>div{display:flex;flex-direction:column;gap:1px}
 #themeBtn .sun{display:none}

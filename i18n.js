@@ -4,7 +4,7 @@
 (() => {
   const LANG = localStorage.getItem("uiLang") === "en" ? "en" : "ar";
   const D = {
-    "مساعد المذاكرة": "Smart Study", "مدرّسك الخاص لأي كتاب": "Your private tutor for any book", "الذكاء الاصطناعي": "AI", "المزوّد": "Provider",
+    "مساعد المذاكرة": "AskMyBook", "مدرّسك الخاص لأي كتاب": "Your private tutor for any book", "الذكاء الاصطناعي": "AI", "المزوّد": "Provider",
     "🆓 مجاني بدون تسجيل ولا مفتاح ولا تحميل (الافتراضي)": "🆓 Free — no sign-up, no key, no download (default)", "✨ «ذكي» — سحابي مجاني بدون مفتاح (بيشوف الصور، ومبيحملش على جهازك)": "✨ Cloud (Puter) — free, sees images",
     "Gemini من Google (مجاني)": "Gemini by Google (free)", "Claude (مفتاح مدفوع)": "Claude (paid key)", "🎙️ صوت أوضح وأطبع (ElevenLabs) — سجّل دخول Puter مجانًا": "🎙️ Clearer, more natural voice (ElevenLabs) — sign in to Puter for free", "💻 محلي على جهازك (WebGPU — تحميل كبير مرة واحدة، وبعدها من غير نت)": "💻 On your device (WebGPU — one big download, then works offline)", "تسجيل دخول Puter": "Sign in to Puter", "حمّل الآن": "Load now", "حفظ": "Save",
     "المفتاح بيتحفظ في متصفحك بس.": "The key is stored only in your browser.", "مصدر الإجابات": "Answer source",
@@ -82,7 +82,7 @@
   b.onclick = () => { localStorage.setItem("uiLang", LANG === "en" ? "ar" : "en"); location.reload(); };
   document.querySelector("header .hbtns")?.prepend(b);
   if (LANG === "en") {
-    document.documentElement.lang = "en"; document.documentElement.dir = "ltr"; document.title = "Smart Study";
+    document.documentElement.lang = "en"; document.documentElement.dir = "ltr"; document.title = "AskMyBook";
     const q = $("q"); if (q) q.dir = "auto";
     apply(document.body);
     let pend = new Set(), raf = 0;
