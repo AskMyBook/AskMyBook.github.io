@@ -1,0 +1,1 @@
+pgserver>=0.1.4   # real Postgres + pgvector for tests/rls.test.py (pip install -r requirements-dev.txt)

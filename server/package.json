@@ -1,0 +1,9 @@
+{
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node node.mjs",
+    "deploy": "wrangler deploy",
+    "bundle": "node ../tools/gen-persona.mjs && npx -y esbuild@0.24.0 worker.js --bundle --format=esm --platform=neutral --outfile=worker-bundle.js"
+  }
+}

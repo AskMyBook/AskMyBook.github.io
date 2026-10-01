@@ -1,0 +1,22 @@
+# Cloudflare Worker (مجاني): npx wrangler deploy
+# المفاتيح بتتحط كـ secrets (مش هنا):
+#   npx wrangler secret put ANTHROPIC_API_KEY
+#   npx wrangler secret put AZURE_SPEECH_KEY      (اختياري: صوت)
+#   npx wrangler secret put GEMINI_API_KEY        (اختياري: شات/embeddings — مش للصوت)
+# وللصوت من سيرفرك الخاص: PIPER_URL أو TTS_OAI_URL كـ vars
+name = "study-tutor"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# لوحة التحكم (/admin) محتاجة مخزن KV باسم CONFIG (اعمله: npx wrangler kv namespace create CONFIG وحط الـ id هنا)
+# [[kv_namespaces]]
+# binding = "CONFIG"
+# id = "PUT-THE-ID-HERE"
+
+# Cloudflare Workers AI: مزوّد مجاني من غير مفتاح (احتياطي في سلسلة الشات)
+[ai]
+binding = "AI"
+
+[vars]
+ALLOWED_ORIGINS = "https://YOUR-NAME.github.io"
+AZURE_SPEECH_REGION = "westeurope"

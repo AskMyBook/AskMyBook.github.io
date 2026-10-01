@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#3346c8">
+<title>Smart Study — مدرّسك الخاص لأي كتاب</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='11' fill='%233346c8'/%3E%3Cg transform='translate(0 3.5)'%3E%3Cpath d='M20 13.5c-2.6-1.7-5.6-2.3-9-2v15.3c3.4-.3 6.4.3 9 2 2.6-1.7 5.6-2.3 9-2V11.5c-3.4-.3-6.4.3-9 2z' fill='none' stroke='white' stroke-width='2.4' stroke-linejoin='round'/%3E%3Cline x1='20' y1='13.5' x2='20' y2='28.8' stroke='white' stroke-width='2.4'/%3E%3C/g%3E%3Cpath d='M20 3.6Q20.7 7.6 24.4 8.4 20.7 9.2 20 13.2 19.3 9.2 15.6 8.4 19.3 7.6 20 3.6z' fill='%23f2b705'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;500;600;700&family=Cairo:wght@600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=20261001d">
+</head>
+<body>
+<a class="skip" href="#q">اتخطّى للسؤال</a>
+<header>
+  <div class="brand"><span class="logo"><svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="11" fill="var(--main)"/><g transform="translate(0 3.5)"><path d="M20 13.5c-2.6-1.7-5.6-2.3-9-2v15.3c3.4-.3 6.4.3 9 2 2.6-1.7 5.6-2.3 9-2V11.5c-3.4-.3-6.4.3-9 2z" fill="none" stroke="var(--on)" stroke-width="2" stroke-linejoin="round"/><line x1="20" y1="13.5" x2="20" y2="28.8" stroke="var(--on)" stroke-width="2"/></g><path d="M20 3.6Q20.7 7.6 24.4 8.4 20.7 9.2 20 13.2 19.3 9.2 15.6 8.4 19.3 7.6 20 3.6z" fill="var(--acc)"/></svg></span><div><h1 lang="en">Smart Study</h1><small>مدرّسك الخاص لأي كتاب</small></div></div>
+  <div class="hbtns"><button id="themeBtn" class="icon" title="فاتح / غامق" aria-label="تبديل الوضع الفاتح والغامق"><svg class="i moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="i sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button><button id="settingsBtn" class="icon" title="الإعدادات" aria-label="الإعدادات"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg></button></div>
+</header>
+
+<section id="settings" hidden>
+  <div class="sc">
+    <h2><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg> الذكاء الاصطناعي</h2>
+    <div class="f"><label for="prov">المزوّد</label>
+    <select id="prov"><option value="free">🆓 مجاني بدون تسجيل ولا مفتاح ولا تحميل (الافتراضي)</option><option value="puter">✨ «ذكي» — سحابي مجاني بدون مفتاح (بيشوف الصور، ومبيحملش على جهازك)</option><option class="adv" value="gemini">Gemini من Google (مجاني)</option><option class="adv" value="claude">Claude (مفتاح مدفوع)</option><option class="adv" value="local">💻 محلي على جهازك (WebGPU — تحميل كبير مرة واحدة، وبعدها من غير نت)</option></select></div>
+    <div id="gHelp">١) افتح <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" dir="ltr">aistudio.google.com/apikey</a> وسجّل بحساب جوجل. ٢) اضغط Create API key. ٣) انسخ المفتاح والصقه تحت. من غير كارت ولا فلوس.</div>
+    <div id="pRow" hidden>
+      <div class="row"><select id="pmodel" aria-label="موديل Puter"></select><button id="psign" type="button">تسجيل دخول Puter</button></div>
+      <div id="pstat" class="vnow"></div>
+      <small>بيشتغل عن طريق Puter.js: مفيش مفتاح ولا Gemini. كل مستخدم بيستخدم حسابه المجاني على Puter (بيتعمل لك تلقائيًا أول مرة). الشغل كله على سيرفراتهم فجهازك مبيتحملش حاجة.</small>
+    </div>
+    <div id="lRow" hidden>
+      <div class="row"><select id="lmodel" aria-label="الموديل المحلي"></select><button id="lload" type="button">حمّل الآن</button></div>
+      <div id="lstat" class="vnow"></div>
+      <small>بيشتغل جوه جهازك بـ WebGPU: مفيش حد يومي ومفيش مفتاح وكلامك مبيتبعتش لحد. التحميل مرة واحدة بس. ملحوظة: مبيشوفش الصور، بيقرا نص الصفحة من الـ PDF.</small>
+    </div>
+    <div id="keyRow" class="row"><input id="key" type="password" dir="ltr" aria-label="مفتاح API"><button id="saveKey">حفظ</button></div>
+    <small id="keyNote">المفتاح بيتحفظ في متصفحك بس.</small>
+    <div class="f"><label for="srclock">مصدر الإجابات</label>
+      <select id="srclock"><option value="0">💬 شات مفتوح — الكتاب الأول، وأي سؤال تاني بيتجاوب (زي Gemini)</option><option value="1">🔒 الكتاب المحدد بس — «مش لاقي» لو المعلومة مش فيه</option></select></div>
+    <div class="f adv"><label for="embmode">البحث بالمعنى في كتبك (embeddings)</label>
+      <select id="embmode"><option value="auto">تلقائي — سيرفر الموقع أو مفتاح Gemini لو موجود</option><option value="local">محلي في المتصفح (تحميل ~١٢٠ ميجا مرة واحدة)</option><option value="off">إيقاف — بحث بالكلمات بس</option></select>
+      <div id="embStat" class="vnow"></div></div>
+  </div>
+  <div id="vrow" class="sc" hidden>
+    <h2><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="10" x2="4" y2="14"/><line x1="8" y1="6" x2="8" y2="18"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="16" y1="7" x2="16" y2="17"/><line x1="20" y1="10" x2="20" y2="14"/></svg> الصوت</h2>
+    <div class="f"><label for="tprov">محرك الصوت</label>
+      <select id="tprov"></select></div>
+    <div class="f"><label for="tteach">المدرّس</label>
+      <select id="tteach"><option value="ar">المدرّس العربي</option><option value="en">English Teacher</option></select></div>
+    <div class="f"><label for="tvoice">الصوت</label>
+      <div class="row"><select id="tvoice"></select><button id="vtest" type="button">▶ جرّب</button></div></div>
+    <div class="f adv"><label for="tone">صوت المدرّس</label>
+      <select id="tone"><option value="1">صوت واحد للعربي والإنجليزي (موصى بيه)</option><option value="0">صوت عربي + صوت إنجليزي منفصل</option></select></div>
+    <div class="f adv"><label for="tlang">اللغة</label>
+      <select id="tlang"><option value="auto">تلقائي (عربي + English كل كلمة بنطقها)</option><option value="ar">عربي بس</option><option value="en">English only</option></select></div>
+    <div class="f"><label for="vrate">السرعة</label>
+      <select id="vrate"><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option></select></div>
+    <div class="f adv"><label for="tpitch">طبقة الصوت <span id="tpitchv" dir="ltr">1.00×</span></label>
+      <input id="tpitch" type="range" min="0.8" max="1.2" step="0.05" value="1"><small id="tpitchNote">المحرك الحالي مبيدعمش تغيير طبقة الصوت.</small></div>
+    <div id="vnow" class="vnow adv"></div>
+    <button id="tsign" type="button" hidden>🎙️ صوت أوضح وأطبع (ElevenLabs) — سجّل دخول Puter مجانًا</button>
+    <small>الصوت مبيشتغلش غير لما تدوس «اسمع» تحت الشرح.</small><small class="adv">التلقائي: سيرفر الموقع (لو صاحب الموقع ظبطه) ← Puter/ElevenLabs لو سجّلت ← صوت المتصفح ← «كريم» اللي بيشتغل جوه جهازك.</small>
+  </div>
+</section>
+
+<nav id="tabs">
+  <button data-t="book" class="on"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> الكتاب</button>
+  <button data-t="chat"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> المساعد</button>
+</nav>
+
+<div id="app" class="show-book">
+  <section id="viewer">
+    <div id="books"></div>
+    <div id="bar">
+      <button id="prev" class="icon" title="الصفحة السابقة" aria-label="الصفحة السابقة"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <input id="pn" type="number" min="1" value="1" aria-label="رقم الصفحة"><span id="pt"></span>
+      <button id="next" class="icon" title="الصفحة التالية" aria-label="الصفحة التالية"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
+      <span class="sep"></span>
+      <button id="zo" class="icon" title="تصغير" aria-label="تصغير"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      <button id="zi" class="icon" title="تكبير" aria-label="تكبير"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      <button id="swap" class="icon" title="إضافة كتب (PDF) من جهازك" aria-label="إضافة كتب"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
+      <button id="addAll" class="icon" title="إضافة كتب (PDF) من جهازك" aria-label="إضافة كتب"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+      <button id="solve" class="accent" title="حل كل أسئلة الصفحة"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.7 1.8L21.5 17.5l-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z"/></svg> حل الصفحة</button>
+      <button id="explain" class="accent" title="شرح الدرس بصوت المدرّس"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg> اشرح الدرس</button>
+    </div>
+    <div id="tools">
+      <button type="button" class="t on" data-tool="select" title="تحديد / اسأل AI / تمرير" aria-label="تحديد"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l7.07 17 2.51-7.39L21 11.07z"/></svg></button>
+      <button type="button" class="t" data-tool="pen" title="قلم" aria-label="قلم"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+      <button type="button" class="t" data-tool="hl" title="هايلايتر" aria-label="هايلايتر"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l-6 6v3h9l3-3"/><path d="M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg></button>
+      <button type="button" class="t" data-tool="text" title="اكتب نص" aria-label="نص"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg></button>
+      <button type="button" class="t" data-tool="eraser" title="ممحاة" aria-label="ممحاة"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 20H7L3 16a2 2 0 0 1 0-2.8L13.2 3a2 2 0 0 1 2.8 0l5 5a2 2 0 0 1 0 2.8L11 21"/><line x1="8" y1="8" x2="16" y2="16"/></svg></button>
+      <button type="button" class="t" data-tool="pencil" title="رصاص (خط رفيع)" aria-label="رصاص"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21l3.5-1 11-11-2.5-2.5-11 11z"/><path d="M14 6l2.5 2.5"/><path d="M18 3l3 3-1.5 1.5-3-3z"/></svg></button>
+      <span class="shapewrap"><button type="button" id="shapeBtn" class="t" title="أشكال: خط / سهم / مستطيل / دايرة" aria-label="أشكال" aria-haspopup="true"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1"/><circle cx="17" cy="17" r="4"/><line x1="14" y1="4" x2="21" y2="11"/></svg></button>
+        <span id="shapes" class="shapes" hidden>
+          <button type="button" class="t" data-tool="line" title="خط" aria-label="خط"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="20" x2="20" y2="4"/></svg></button>
+          <button type="button" class="t" data-tool="arrow" title="سهم" aria-label="سهم"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="20" x2="20" y2="4"/><polyline points="10 4 20 4 20 14"/></svg></button>
+          <button type="button" class="t" data-tool="rect" title="مستطيل" aria-label="مستطيل"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1"/></svg></button>
+          <button type="button" class="t" data-tool="circle" title="دايرة" aria-label="دايرة"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg></button>
+        </span></span>
+      <button type="button" class="t" data-tool="move" title="حدّد كتابة/شكل: حرّكه، أو كبّره من المربع الأزرق، أو امسحه" aria-label="تحديد وتحريك"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg></button>
+      <span class="sep"></span>
+      <span id="colors"></span>
+      <input id="sz" type="range" min="1" max="3" value="2" title="سُمك القلم / حجم الخط" aria-label="السُمك">
+      <input id="hlop" type="range" min="0.15" max="0.8" step="0.05" value="0.4" title="شفافية الهايلايتر" aria-label="شفافية الهايلايتر" hidden>
+      <span class="sep"></span>
+      <button type="button" id="annNext" class="t" title="روح للصفحة اللي بعدها فيها كتابة أو تظليل" aria-label="الصفحة اللي فيها تعليقات"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v12H8l-4 4z"/><path d="M8 9h8"/></svg><span id="annN" class="ann-n" hidden></span></button>
+      <button type="button" id="undo" class="t" title="تراجع (Ctrl+Z)" aria-label="تراجع"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
+      <button type="button" id="redo" class="t" title="إعادة (Ctrl+Y)" aria-label="إعادة"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+      <button type="button" id="delSel" class="t" title="امسح المحدد (Delete)" aria-label="امسح المحدد" hidden><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <button type="button" id="clr" class="t" title="مسح كتابة الصفحة" aria-label="مسح"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+    </div>
+    <div id="wrap">
+      <div id="vmsg"><div class="big"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div><h3>ابدأ من هنا</h3><p>اختار كتاب من فوق عشان يفتح هنا</p><p style="margin-top:16px"><button id="addAll2"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> إضافة كل الكتب مرة واحدة</button><br><small>اختار الـ 5 ملفات مرة واحدة، وهيتحفظوا في المتصفح</small></p></div>
+      <div id="pages" hidden></div>
+    </div>
+  </section>
+
+  <section id="side">
+    <main id="chat"></main>
+    <form id="form">
+      <div id="vstatus" hidden role="status" aria-live="polite">
+        <button type="button" id="vorb" class="vorb" title="اتكلم / قاطِع" aria-label="اتكلم"><span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></button>
+        <span id="vtext"></span>
+        <button type="button" id="vstop" class="ghost">إنهاء</button>
+      </div>
+      <div class="composer">
+        <textarea id="q" rows="1" placeholder="اسأل مدرّسك عن أي حاجة في كتابك…" dir="rtl" aria-label="اكتب سؤالك"></textarea>
+        <div class="ctools">
+          <select id="book" aria-label="الكتاب" title="الكتاب اللي بتسأل فيه"></select>
+          <span class="grow"></span>
+          <button type="button" id="lang" class="cbtn txt" title="لغة الميكروفون">ع</button>
+          <button type="button" id="spk" class="cbtn" title="قراءة الردود بصوت عالي" aria-label="قراءة تلقائية"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg></button>
+          <button type="button" id="talk" class="cbtn" title="محادثة صوتية: اتكلم والمدرّس يرد بصوته" aria-label="محادثة صوتية"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="10" x2="4" y2="14"/><line x1="8" y1="7" x2="8" y2="17"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="16" y1="7" x2="16" y2="17"/><line x1="20" y1="10" x2="20" y2="14"/></svg></button>
+          <button type="button" id="mic" class="cbtn" title="اكتب بصوتك (إملاء)" aria-label="ميكروفون"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button>
+          <button id="send" class="csend" title="إرسال" aria-label="إرسال"></button>
+        </div>
+      </div>
+      <small class="disc">المدرّس بيعتمد على كتابك، وممكن يغلط — راجع الصفحة من زرار المصدر.</small>
+    </form>
+  </section>
+</div>
+
+<input id="files" type="file" accept="application/pdf,.pdf" multiple hidden>
+<input id="file" type="file" accept="application/pdf,.pdf" hidden>
+<script src="config.js?v=20261001d"></script>
+<script src="proxy.js?v=20261001d"></script>
+<script src="lib/pdf.min.js"></script>
+<script src="data/pages.js"></script>
+
+<script src="persona.js?v=20261001d"></script>
+<script src="app.js?v=20261001d"></script>
+<script src="ai.js?v=20261001d"></script>
+<script src="ink.js?v=20261001d"></script>
+<script src="tts.js?v=20261001d"></script>
+<script src="voice.js?v=20261001d"></script>
+<script src="rag.js?v=20261001d"></script>
+<script src="tutor.js?v=20261001d"></script>
+<script src="ui.js?v=20261001d"></script>
+<script src="reader.js?v=20261001d"></script>
+<script src="mobile.js?v=20261001d"></script>
+<script src="jobs.js?v=20261001d"></script>
+<script src="study.js?v=20261001d"></script>
+<script src="i18n.js?v=20261001d"></script>
+<script src="cloud.js?v=20261001d"></script>
+</body>
+</html>
