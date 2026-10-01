@@ -14,9 +14,12 @@ const oa = (id, label, base, keyName, model, vision, link, extraHeaders = {}) =>
 
 export const CHAT_PROVIDERS = [
   { id: "gemini", label: "Google Gemini", keyName: "GEMINI_API_KEY", link: "https://aistudio.google.com/apikey", kind: "gemini",
-    configured: env => !!env.GEMINI_API_KEY, model: env => env.GEMINI_MODEL || "gemini-2.5-flash", defaultModel: "gemini-2.5-flash", vision: () => true },
-  oa("groq", "Groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY", "llama-3.3-70b-versatile", false, "https://console.groq.com/keys"),
-  oa("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", "meta-llama/llama-3.3-70b-instruct:free", false, "https://openrouter.ai/settings/keys", { "x-title": "Study Tutor" }),
+    configured: env => !!env.GEMINI_API_KEY, model: env => env.GEMINI_MODEL || "gemini-3.8-flash", defaultModel: "gemini-3.8-flash", vision: () => true },
+  { id: "geminilite", label: "Google Gemini Lite (احتياطي)", keyName: "GEMINI_API_KEY", link: "https://aistudio.google.com/apikey", kind: "gemini",
+    configured: env => !!env.GEMINI_API_KEY, model: env => env.GEMINILITE_MODEL || "gemini-flash-lite-latest", defaultModel: "gemini-flash-lite-latest", vision: () => true },
+  oa("groq", "Groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY", "openai/gpt-oss-120b", false, "https://console.groq.com/keys"),
+  oa("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", "openrouter/free", true, "https://openrouter.ai/settings/keys", { "x-title": "Study Tutor" }),
+  oa("nvidia", "NVIDIA NIM", "https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY", "nvidia/nemotron-3-super-120b-a12b", false, "https://build.nvidia.com/settings/api-keys"),
   { id: "cloudflare", label: "Cloudflare Workers AI", keyName: "", link: "https://developers.cloudflare.com/workers-ai/", kind: "cfai",
     configured: env => !!env.AI?.run, model: env => env.CLOUDFLARE_MODEL || "@cf/meta/llama-3.3-70b-instruct-fp8-fast", defaultModel: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", vision: () => false },
   { id: "anthropic", label: "Anthropic Claude (مدفوع)", keyName: "ANTHROPIC_API_KEY", link: "https://console.anthropic.com/settings/keys", kind: "anthropic",
@@ -97,7 +100,7 @@ async function callOne(p, env, { system, msgs, imgs, max, temp, signal }) {
   } else {
     const m = [{ role: "system", content: system }, ...msgs.map((x, i) => i === last && imgs.length ? { role: "user", content: [{ type: "text", text: x.content }, ...imgs.map(d => ({ type: "image_url", image_url: { url: "data:image/jpeg;base64," + d } }))] } : x)];
     r = await fetch(p.base(env) + "/chat/completions", { method: "POST", signal, headers: { "content-type": "application/json", ...p.headers(env) },
-      body: JSON.stringify({ model, messages: m, stream: true, max_tokens: max, ...(temp != null ? { temperature: temp } : {}) }) });
+      body: JSON.stringify({ model, messages: m, stream: true, max_tokens: max, ...(/gpt-oss/.test(model) && p.id === "groq" ? { reasoning_effort: "low" } : {}), ...(temp != null ? { temperature: temp } : {}) }) });
     pick = j => { if (j.error) throw new Error(j.error.message || "stream error"); return j.choices?.[0]?.delta?.content || ""; };
   }
   if (!r.ok) throw fail(r.status, await errText(r), r.headers.get("retry-after"));
@@ -154,7 +157,7 @@ export async function testProvider(env, id) {
   if (!p.configured(env)) return { ok: false, error: p.kind === "cfai" ? "ربط Workers AI (باسم AI) مش موجود" : "مفيش مفتاح" };
   const t0 = Date.now();
   try {
-    const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "قول: أهلاً، أنا شغال." }], imgs: [], max: 40, temp: 0, signal: AbortSignal.timeout(25000) });
+    const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "قول: أهلاً، أنا شغال." }], imgs: [], max: 600, temp: 0, signal: AbortSignal.timeout(25000) });
     const next = sseReader(body, pick); let out = "", t; while (out.length < 200 && (t = await next())) out += t;
     if (!out) return { ok: false, error: "رد فاضي", ms: Date.now() - t0 };
     statOf(id).coolUntil = 0;

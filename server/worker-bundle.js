@@ -446,12 +446,24 @@ var CHAT_PROVIDERS = [
     link: "https://aistudio.google.com/apikey",
     kind: "gemini",
     configured: (env) => !!env.GEMINI_API_KEY,
-    model: (env) => env.GEMINI_MODEL || "gemini-2.5-flash",
-    defaultModel: "gemini-2.5-flash",
+    model: (env) => env.GEMINI_MODEL || "gemini-3.8-flash",
+    defaultModel: "gemini-3.8-flash",
     vision: () => true
   },
-  oa("groq", "Groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY", "llama-3.3-70b-versatile", false, "https://console.groq.com/keys"),
-  oa("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", "meta-llama/llama-3.3-70b-instruct:free", false, "https://openrouter.ai/settings/keys", { "x-title": "Study Tutor" }),
+  {
+    id: "geminilite",
+    label: "Google Gemini Lite (\u0627\u062D\u062A\u064A\u0627\u0637\u064A)",
+    keyName: "GEMINI_API_KEY",
+    link: "https://aistudio.google.com/apikey",
+    kind: "gemini",
+    configured: (env) => !!env.GEMINI_API_KEY,
+    model: (env) => env.GEMINILITE_MODEL || "gemini-flash-lite-latest",
+    defaultModel: "gemini-flash-lite-latest",
+    vision: () => true
+  },
+  oa("groq", "Groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY", "openai/gpt-oss-120b", false, "https://console.groq.com/keys"),
+  oa("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", "openrouter/free", true, "https://openrouter.ai/settings/keys", { "x-title": "Study Tutor" }),
+  oa("nvidia", "NVIDIA NIM", "https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY", "nvidia/nemotron-3-super-120b-a12b", false, "https://build.nvidia.com/settings/api-keys"),
   {
     id: "cloudflare",
     label: "Cloudflare Workers AI",
@@ -601,7 +613,7 @@ async function callOne(p, env, { system, msgs, imgs, max, temp, signal }) {
       method: "POST",
       signal,
       headers: { "content-type": "application/json", ...p.headers(env) },
-      body: JSON.stringify({ model, messages: m, stream: true, max_tokens: max, ...temp != null ? { temperature: temp } : {} })
+      body: JSON.stringify({ model, messages: m, stream: true, max_tokens: max, .../gpt-oss/.test(model) && p.id === "groq" ? { reasoning_effort: "low" } : {}, ...temp != null ? { temperature: temp } : {} })
     });
     pick = (j) => {
       if (j.error) throw new Error(j.error.message || "stream error");
@@ -677,7 +689,7 @@ async function testProvider(env, id) {
   if (!p.configured(env)) return { ok: false, error: p.kind === "cfai" ? "\u0631\u0628\u0637 Workers AI (\u0628\u0627\u0633\u0645 AI) \u0645\u0634 \u0645\u0648\u062C\u0648\u062F" : "\u0645\u0641\u064A\u0634 \u0645\u0641\u062A\u0627\u062D" };
   const t0 = Date.now();
   try {
-    const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "\u0642\u0648\u0644: \u0623\u0647\u0644\u0627\u064B\u060C \u0623\u0646\u0627 \u0634\u063A\u0627\u0644." }], imgs: [], max: 40, temp: 0, signal: AbortSignal.timeout(25e3) });
+    const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "\u0642\u0648\u0644: \u0623\u0647\u0644\u0627\u064B\u060C \u0623\u0646\u0627 \u0634\u063A\u0627\u0644." }], imgs: [], max: 600, temp: 0, signal: AbortSignal.timeout(25e3) });
     const next = sseReader(body, pick);
     let out = "", t;
     while (out.length < 200 && (t = await next())) out += t;
@@ -798,7 +810,7 @@ start();
 </script></body></html>`;
 
 // admin.js
-var KEY_NAMES = ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"];
+var KEY_NAMES = ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "NVIDIA_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"];
 var VAR_NAMES = [
   "ALLOWED_ORIGINS",
   "LLM_ORDER",

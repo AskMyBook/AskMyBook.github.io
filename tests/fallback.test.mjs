@@ -57,7 +57,7 @@ ok("old LLM_PROVIDER=openai still means only OpenAI", r.prov === "openai" && JSO
 fresh(); r = await chat({});
 ok("no provider at all → 400 pointing to /admin", r.status === 400 && /admin/.test(r.raw));
 const h = await (await handle(new Request("https://w.dev/v1/health"), { ...KEYS })).json();
-ok("health shows the chain, no secrets", JSON.stringify(h.chatChain) === '["gemini","groq","openrouter"]' && !JSON.stringify(h).includes("SECRET"));
+ok("health shows the chain, no secrets", JSON.stringify(h.chatChain) === '["gemini","geminilite","groq","openrouter"]' && !JSON.stringify(h).includes("SECRET"));
 
 // ---------- الأدمن ----------
 globalThis.__TUTOR_MEM_KV.clear();
