@@ -1003,13 +1003,14 @@ const SYSTEM_V = `أنت مدرّس خصوصي ذكي. هتاخد صورة (صف
 ${GEN}
 - رد بنفس لغة السؤال.`;
 const band = Object.assign(document.createElement("div"), { id: "band", hidden: true }), selBox = Object.assign(document.createElement("div"), { id: "sel", hidden: true }),
-  chip = Object.assign(document.createElement("div"), { id: "chip", hidden: true, innerHTML: '<button type="button" data-k="ask">✨ اسأل الـ AI</button><button type="button" data-k="mean">📖 المعنى</button><button type="button" data-k="def">📚 Definition</button><button type="button" data-k="say">🔊 انطق</button><button type="button" data-k="tr">🌐 ترجم</button>' }), BAND = 0.03, P = $("pages");
+  chip = Object.assign(document.createElement("div"), { id: "chip", hidden: true, innerHTML: '<button type="button" data-k="ask">✨ اسأل الـ AI</button><button type="button" data-k="kur" class="kurk">📓 للكراسة</button><button type="button" data-k="mean">📖 المعنى</button><button type="button" data-k="def">📚 Definition</button><button type="button" data-k="say">🔊 انطق</button><button type="button" data-k="tr">🌐 ترجم</button>' }), BAND = 0.03, P = $("pages");
 let pin = null, drag = null, hoverSpec = null, busy = false, host = null;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 function clearPin() { pin = null; drag = null; hoverSpec = null; band.hidden = selBox.hidden = chip.hidden = true; }
 function place(spec) {
   const el = spec.el; if (host !== el) { el.append(band, selBox, chip); host = el; }
   const W = el.clientWidth, H = el.clientHeight; hoverSpec = spec; chip.hidden = false;
+  const kb = chip.querySelector(".kurk"); if (kb) kb.hidden = spec.type !== "rect";   // «للكراسة» للجزء اللي اتعلّم عليه بمربع بس
   if (spec.type === "band") {
     const h = Math.max(26, BAND * H), en = cur.id === "english"; band.hidden = false; selBox.hidden = true;
     band.style.top = (spec.y * H - h / 2) + "px"; band.style.height = h + "px";
@@ -1017,7 +1018,7 @@ function place(spec) {
   } else {
     band.hidden = true; selBox.hidden = false;
     Object.assign(selBox.style, { left: spec.x0 * W + "px", top: spec.y0 * H + "px", width: (spec.x1 - spec.x0) * W + "px", height: (spec.y1 - spec.y0) * H + "px" });
-    chip.style.right = "auto"; chip.style.left = clamp((spec.x0 + spec.x1) / 2 * W - 150, 4, Math.max(4, W - 330)) + "px"; chip.style.top = (spec.y0 * H >= 42 ? spec.y0 * H - 38 : Math.min(spec.y1 * H + 6, H - 38)) + "px";
+    const cw = Math.min(chip.offsetWidth || 330, W - 8); chip.style.right = "auto"; chip.style.left = clamp((spec.x0 + spec.x1) / 2 * W - cw / 2, 4, Math.max(4, W - cw - 4)) + "px"; chip.style.top = (spec.y0 * H >= 42 ? spec.y0 * H - 38 : Math.min(spec.y1 * H + 6, H - 38)) + "px";
   }
 }
 const pgOf = e => e.target.closest?.(".pg");
@@ -1040,7 +1041,9 @@ P.addEventListener("pointerup", e => {
 P.addEventListener("pointercancel", () => { drag = null; });
 P.addEventListener("pointerleave", e => { if (!pin && !drag && e.pointerType === "mouse") band.hidden = chip.hidden = true; });
 addEventListener("keydown", e => { if (e.key === "Escape") clearPin(); });
-chip.onclick = e => { const b = e.target.closest("button"); if (!b || !hoverSpec) return; const k = b.dataset.k; if (k === "ask") askSpec(hoverSpec); else quickSel(hoverSpec, k); };
+chip.onclick = e => { const b = e.target.closest("button"); if (!b || !hoverSpec) return; const k = b.dataset.k;
+  if (k === "kur") { const sp = hoverSpec; b.disabled = true; snap(sp, sp.n).then(url => window.KURASA?.addImage(url, { book: cur.id, page: sp.n })).catch(err => toast("⚠️ " + err.message)).finally(() => { b.disabled = false; clearPin(); }); return; }
+  if (k === "ask") askSpec(hoverSpec); else quickSel(hoverSpec, k); };
 $("solve").onclick = () => askSpec(null);
 
 async function snap(spec, n, wide = 1700, dd = null) {

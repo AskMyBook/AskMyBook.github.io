@@ -203,7 +203,15 @@ function inkClear() {
 }
 
 // ----- شريط الأدوات -----
-function syncColors() { const c = inkColor(); document.querySelectorAll("#colors .cdot[data-c]").forEach(d => d.classList.toggle("on", d.dataset.c === c));
+// مؤشر الماوس على الكتاب: شكل قلم بلون القلم الحالي (بدل علامة +)، وهايلايتر بلونه، ودايرة للممحاة
+function pdfCursor() {
+  const u = (svg, x, y, fb) => `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${x} ${y}, ${fb}`, t = INK.tool;
+  if (t === "eraser") return u('<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><circle cx="14" cy="14" r="12" fill="rgba(255,255,255,.55)" stroke="#333" stroke-width="1.5"/></svg>', 14, 14, "cell");
+  const c = /^#[0-9a-f]{6}$/i.test(t === "hl" ? INK.hc : INK.pc) ? (t === "hl" ? INK.hc : INK.pc) : "#e11d48";
+  if (t === "hl") return u(`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><path d="M4 24l2-6L18 6l4 4-12 12z" fill="${c}" stroke="#333" stroke-width="1.4" stroke-linejoin="round"/><path d="M4 24l2-6 4 4z" fill="#555" stroke="#333" stroke-width="1.2" stroke-linejoin="round"/></svg>`, 4, 24, "crosshair");
+  return u(`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><path d="M3.5 24.5l1.4-5.3L19 5.1a2.3 2.3 0 0 1 3.2 0l.7.7a2.3 2.3 0 0 1 0 3.2L8.8 23.1z" fill="${c}" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/><path d="M3.5 24.5l1.4-5.3L19 5.1a2.3 2.3 0 0 1 3.2 0l.7.7a2.3 2.3 0 0 1 0 3.2L8.8 23.1z" fill="${c}" stroke="#222" stroke-width="1.1" stroke-linejoin="round"/><path d="M3.5 24.5l1.4-5.3 3.9 3.9z" fill="#f1d3a6" stroke="#222" stroke-width="1" stroke-linejoin="round"/><path d="M3.5 24.5l.6-2.3 1.7 1.7z" fill="#222"/></svg>`, 3, 25, "crosshair");
+}
+function syncColors() { const c = inkColor(); document.body.style.setProperty("--pdfcur", pdfCursor()); document.querySelectorAll("#colors .cdot[data-c]").forEach(d => d.classList.toggle("on", d.dataset.c === c));
   const pk = $("inkPickDot"), custom = !PALETTE.includes(c); if (pk) { pk.classList.toggle("on", custom); pk.style.setProperty("--c", custom ? c : "transparent"); const i = $("inkPick"); if (i && /^#[0-9a-f]{6}$/i.test(c)) i.value = c; } }
 function setTool(t) {
   finishText(); INK.tool = t; document.body.dataset.tool = t; clearPin();

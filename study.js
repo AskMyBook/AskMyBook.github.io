@@ -566,5 +566,6 @@
   };
   S._EX = EX;   // للاختبارات
   S.nbClean = nbClean;
+  S.videoSearch = (q, lang) => vFetch(q, lang || vLang(q)); S.vYT = vYT; S.vDur = vDur; S.vNum = vNum; S.vSaveToggle = vSaveToggle;
   window.STUDY = S;
 })();
