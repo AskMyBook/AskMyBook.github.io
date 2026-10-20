@@ -98,11 +98,14 @@
     // المكان الرئيسي
     viewer.classList.toggle("alt", MAIN !== "pdf");
     const mainPane = MAIN === "kur" ? kur : MAIN === "vid" ? vid : null;
+    // الفيديو: لو هيستخبى أو هيتنقل، نشيل الـ iframe الأول (تحريكه في الصفحة بيعيد تشغيله لوحده) ونرجّعه في نفس الثانية بعدين
+    const vidTo = MAIN === "vid" ? viewer : SIDE === "vid" ? side : null;
+    if (vid.querySelector("iframe") && vidTo !== vid.parentElement) dropFrame();
     if (mainPane && mainPane.parentElement !== viewer) viewer.append(mainPane);
     // الجانبي
     const sidePane = SIDE === "kur" ? kur : SIDE === "vid" ? vid : null;
     if (sidePane && sidePane !== mainPane && sidePane.parentElement !== side) side.append(sidePane);
-    [kur, vid].forEach(p => { const on = p === mainPane || p === sidePane; p.classList.toggle("show", on); if (!on && p.parentElement !== side) side.append(p); });
+    [kur, vid].forEach(p => { const on = p === mainPane || p === sidePane; p.classList.toggle("show", on); if (!on && p === kur && p.parentElement !== side) side.append(p); });
     const sideChat = SIDE === "chat" && !AIF;
     body.classList.toggle("side-chat", sideChat);
     body.classList.toggle("side-off", OFF || (SIDE === "chat" && AIF && !mob()));
@@ -154,18 +157,33 @@
   // =====================================================================
   //  ٢) الفيديو جوه الموقع
   // =====================================================================
+  // حالة كل فيديو (الثانية اللي وقف عندها، وكان شغال ولا لأ) من رسايل مشغّل يوتيوب نفسه (enablejsapi)
+  const VST = {};
+  const ytSrc = (id, start, auto) => `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?enablejsapi=1&rel=0&playsinline=1&autoplay=${auto ? 1 : 0}${start > 1 ? "&start=" + Math.floor(start) : ""}&origin=${encodeURIComponent(location.origin)}`;
+  const frame = () => vid.querySelector("iframe");
+  const cmd = (func, args = []) => { try { frame()?.contentWindow?.postMessage(JSON.stringify({ event: "command", func, args }), "*"); } catch {} };
+  window.addEventListener("message", e => {
+    if (!/youtube(-nocookie)?\.com$/.test(new URL(e.origin || "http://x").hostname)) return; let d; try { d = typeof e.data === "string" ? JSON.parse(e.data) : e.data; } catch { return; }
+    const f = frame(); if (!f || e.source !== f.contentWindow) return; const st = VST[vid._id] ||= { t: 0, playing: true };
+    if (d?.info) { if (typeof d.info.currentTime === "number") st.t = d.info.currentTime; if (typeof d.info.playerState === "number") st.playing = d.info.playerState === 1 || d.info.playerState === 3; }
+  });
+  function dropFrame() { const f = frame(); if (!f) return; cmd("pauseVideo"); f.remove(); }
   function drawVideo() {
     const v = VIDS.find(x => x.id === VCUR) || VIDS[0]; if (!v) { vid.innerHTML = ""; vid._id = ""; return; }
-    VCUR = v.id; const where = vid.parentElement === viewer ? "main" : "side";
-    if (vid._id !== v.id) { vid._id = v.id;
-      vid.innerHTML = `<div class="vphead"><b class="grow" title="${esc(v.title || "")}">🎬 ${esc(v.title || T("فيديو يوتيوب"))}</b><button type="button" class="ghost" data-vp="move"></button><a href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" rel="noopener" class="ghost vplink">YouTube ↗</a><button type="button" class="icon" data-vp="close" title="${T("اقفل الفيديو")}" aria-label="${T("اقفل الفيديو")}">${ico('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>')}</button></div>
-        <div class="vpframe"><iframe src="https://www.youtube-nocookie.com/embed/${esc(v.id)}?autoplay=1&rel=0&playsinline=1" title="${esc(v.title || "YouTube")}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`; }
+    VCUR = v.id; const where = vid.parentElement === viewer ? "main" : "side", shown = vid.classList.contains("show");
+    if (vid._id !== v.id || !vid.querySelector(".vpframe")) { dropFrame(); vid._id = v.id;
+      vid.innerHTML = `<div class="vphead"><b class="grow" title="${esc(v.title || "")}">🎬 ${esc(v.title || T("فيديو يوتيوب"))}</b><button type="button" class="ghost" data-vp="move"></button><a href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" rel="noopener" class="ghost vplink">YouTube ↗</a><button type="button" class="icon" data-vp="close" title="${T("اقفل الفيديو")}" aria-label="${T("اقفل الفيديو")}">${ico('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>')}</button></div><div class="vpframe"></div>`; }
+    if (!shown) { dropFrame(); return; }   // مستخبي = مفيش iframe خالص، فمستحيل يشتغل لوحده
+    if (!frame()) { const st = VST[v.id], f = document.createElement("iframe");
+      f.src = ytSrc(v.id, st?.t || 0, st ? st.playing : true); f.title = v.title || "YouTube"; f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen"; f.allowFullscreen = true;
+      f.addEventListener("load", () => { try { f.contentWindow.postMessage(JSON.stringify({ event: "listening", id: "kv", channel: "widget" }), "*"); } catch {} });
+      vid.querySelector(".vpframe").append(f); VST[v.id] ||= { t: 0, playing: true }; }
     vid.querySelector('[data-vp="move"]').textContent = where === "main" ? "⇥ " + T("حطه في اللوحة الجانبية") : "⇤ " + T("حطه مكان الكتاب");
   }
   vid.onclick = e => { const b = e.target.closest("[data-vp]"); if (!b) return;
     if (b.dataset.vp === "close") closeVideo(VCUR);
     else if (vid.parentElement === viewer) { MAIN = "pdf"; SIDE = "vid"; OFF = false; render(); } else { SIDE = "chat"; MAIN = "vid"; render(); } };
-  function closeVideo(id) { VIDS = VIDS.filter(v => v.id !== id); if (VCUR === id) { VCUR = VIDS[0]?.id || ""; vid._id = ""; } if (!VIDS.length) { if (MAIN === "vid") MAIN = "pdf"; if (SIDE === "vid") SIDE = "chat"; } render(); }
+  function closeVideo(id) { if (vid._id === id) { dropFrame(); vid._id = ""; } delete VST[id]; VIDS = VIDS.filter(v => v.id !== id); if (VCUR === id) { VCUR = VIDS[0]?.id || ""; vid._id = ""; } if (!VIDS.length) { if (MAIN === "vid") MAIN = "pdf"; if (SIDE === "vid") SIDE = "chat"; } render(); }
   // where: "main" = مكان الكتاب، "side" = اللوحة الجانبية (مكان الكراسة/المساعد)
   function openVideo(v, where = "main") {
     if (!v?.id) return; if (!VIDS.some(x => x.id === v.id)) VIDS.push({ id: v.id, title: v.title || "" }); VCUR = v.id; vid._id = "";
@@ -495,14 +513,16 @@
   window.addEventListener("study-data", async e => { if (e.detail?.key !== "nb" || e.detail?.from === "kur") return; await K.flush(); await load(); if (built) { $("kStack").innerHTML = ""; VIEWS.clear(); if (kur.classList.contains("show")) K.show(); } });
   K._render = () => renderPage(pvOf(CUR));
   K.layout = () => ({ MAIN, SIDE, OFF, MAX, AIF, VIDS: VIDS.map(v => v.id) });
+  // نص الرد من غير أزرار التحكم والمصادر
+  window.answerText = n => { if (n._copy) return String(n._copy).trim(); const c = n.cloneNode(true); c.querySelectorAll(".acts,.src,.vchat,.ytlink").forEach(x => x.remove()); return c.innerText.trim(); };
   window.KURASA = K;
   window.LAYOUT = { openVideo, closeVideo, openAI, setMain, setSide, state: K.layout };
   window.ytId = ytId;
 
   // «📓 للكراسة» تحت كل رد من المساعد
   const deco = n => { if (n._kur || n.classList.contains("typing") || n.classList.contains("sys")) return; const acts = n.querySelector(":scope > .acts"); if (!acts) return; n._kur = true;
-    const b = document.createElement("button"); b.type = "button"; b.className = "noteBtn"; b.textContent = "📓 " + T("للكراسة"); b.title = T("حط الرد ده في الكراسة");
-    b.onclick = async () => { const t = (n._copy || n.querySelector(":scope > :not(.acts):not(.src)")?.parentElement?.innerText || "").replace(/📝 احفظ كملاحظة|📓 للكراسة|✅ اتحفظت|نسخ|انسخ/g, "").trim(); if (!t) return;
+    const b = document.createElement("button"); b.type = "button"; b.className = "noteBtn"; b.textContent = "📓 " + T("كراسة"); b.title = T("حط الرد ده في الكراسة");
+    b.onclick = async () => { const t = window.answerText(n); if (!t) return;
       await K.appendText(t); b.textContent = "✅ " + T("اتحط في الكراسة"); b.disabled = true; toast("📓 " + T("اتحط الرد في الكراسة")); };
     acts.append(b); };
   new MutationObserver(() => $("chat").querySelectorAll(".m.a:not(.typing)").forEach(deco)).observe($("chat"), { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });

@@ -39,6 +39,13 @@ try {
   await page.goto(`http://127.0.0.1:${port}/`); await sleep(800);
   await page.setInputFiles("#files", [path.join(FX, "newton.pdf")]); await sleep(3000);
 
+  // ===== حالة قراءة الكتاب فوق مش في الشات =====
+  ok("book-reading status shows as a slim bar on top, not a chat message", await page.locator("#bkStatus .bkst").count() === 1 && !/قريت الكتاب|بقرا الكتاب/.test(await page.locator("#chat").innerText()));
+  // ===== الكتاب: مفيش شريط أصفر بيمشي ورا الماوس =====
+  { const pb0 = await page.locator("#pages .pg").first().boundingBox(); await page.mouse.move(pb0.x + pb0.width / 2, pb0.y + 200); await page.mouse.move(pb0.x + pb0.width / 2 + 5, pb0.y + 260, { steps: 3 }); await sleep(200);
+    ok("hovering the PDF with the mouse shows nothing", await page.locator("#band").isHidden() && await page.locator("#chip").isHidden());
+    await page.mouse.click(pb0.x + pb0.width / 2, pb0.y + 300); await sleep(200);
+    ok("a plain click on the PDF selects nothing", await page.locator("#chip").isHidden()); }
   // ===== الكراسة جنب الكتاب =====
   await page.click('.sidehead [data-sm="kur"]'); await sleep(600);
   ok("الكراسة opens beside the book", await page.locator("#side #kur.show .kpage").count() === 1 && await page.locator("#pages").isVisible());
@@ -113,6 +120,7 @@ try {
   if (SHOTS) await page.screenshot({ path: SHOTS + "/k-float.png" });
   // ===== مهارات المساعد: فيديوهات =====
   await ask(page, "حيبلي فيديوهات يوتيوب عن قانون نيوتن التاني"); await sleep(1500);
+  ok("the welcome suggestions hide once the chat starts", await page.locator("#chat .hello").isHidden().catch(() => true));
   ok("«هاتلي فيديوهات…» in the chat shows video cards", await page.locator("#chat .vchat .vc").count() === 2, await page.locator("#chat").innerText().then(t => t.slice(-300)));
   ok("…searched for the topic (+ the book name for context)", lastQ.startsWith("قانون نيوتن التاني") && !/هات|حيبلي|فيديو|يوتيوب/.test(lastQ), lastQ);
   const t1 = await page.evaluate(() => SKILLS.videoTopic("عايز فيديو عن الدرس الاول في الكتاب ده"));
@@ -124,6 +132,13 @@ try {
   if (SHOTS) await page.screenshot({ path: SHOTS + "/k-video.png" });
   await page.click('#vidPane [data-vp="move"]'); await sleep(500);
   ok("⇥ moves the video into the side panel, book comes back", await page.locator("#side #vidPane.show iframe").count() === 1 && await page.locator("#pages").isVisible());
+  await page.click('.sidehead [data-sm="kur"]'); await sleep(500);
+  ok("switching to الكراسة stops the video (no player left running in the background)", await page.locator("#vidPane iframe").count() === 0 && await page.locator("#side #kur.show").isVisible());
+  await page.click('.sidehead [data-sm="vid"]'); await sleep(500);
+  ok("switching back to the video brings it back", await page.locator("#side #vidPane.show iframe").count() === 1);
+  await page.evaluate(() => { const f = document.querySelector("#vidPane iframe"); window.__vsrc = f.src; });
+  await page.click('#views [data-v="kur"]'); await sleep(400); await page.click("#books button >> nth=0"); await sleep(400);
+  ok("opening الكراسة/book elsewhere doesn't restart the video", await page.evaluate(() => document.querySelector("#vidPane iframe")?.src === window.__vsrc));
   await page.click('#vidPane [data-vp="close"]'); await sleep(400);
   ok("✕ closes the video", await page.locator("#views .vchip").count() === 0 && await page.locator("#vidPane iframe").count() === 0);
   await ask(page, "https://youtu.be/dQw4w9WgXcQ"); await sleep(400);

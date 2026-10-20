@@ -683,14 +683,26 @@ async function bkOcr(id, d, b, onProg) {   // OCR للصفحات اللي فاض
   } finally { b.run = false; bkIndex(b); bkSave(id, b); }
 }
 let bkNode = null;
+// حالة قراءة الكتاب بقت شريط صغير فوق (تحت أسماء الكتب)، مش رسالة جوه الشات
+function bkHost() {
+  let h = $("bkStatus"); if (h) return h;
+  h = document.createElement("div"); h.id = "bkStatus"; h.setAttribute("role", "status"); h.setAttribute("aria-live", "polite"); h.hidden = true;
+  const x = document.createElement("button"); x.type = "button"; x.className = "bkx"; x.textContent = "✕"; x.title = "اخفي"; x.setAttribute("aria-label", "اخفي"); x.onclick = () => { h.hidden = true; h._closed = true; };
+  h.append(x); ($("viewbar") || $("books")).after(h); return h;
+}
+function bkShow(node, done) {
+  const h = bkHost(); if (node.parentElement !== h) h.insertBefore(node, h.lastChild);
+  clearTimeout(h._t); h.classList.toggle("done", !!done);
+  if (done) { if (!h._closed) { h.hidden = false; h._t = setTimeout(() => { h.hidden = true; }, 5000); } } else { h._closed = false; h.hidden = false; }
+}
 function bkRender(b, id) {
-  if (!bkNode || bkNode._id !== id) { bkNode = document.createElement("div"); bkNode.className = "m a"; bkNode._id = id; $("chat").append(bkNode); }
+  if (!bkNode || bkNode._id !== id) { bkNode?.remove(); bkNode = document.createElement("div"); bkNode.className = "bkst"; bkNode._id = id; }
   const nd = bkNode, have = bkHave(b), full = have >= b.n * .95, p = document.createElement("div"); nd.textContent = "";
   const btn = (label, fn) => { const x = document.createElement("button"); x.type = "button"; x.className = "bkbtn"; x.textContent = label; x.onclick = fn; return x; };
   if (b.run) {
-    p.textContent = `📖 بذاكر الكتاب... ${have} من ${b.n} صفحة. تقدر تكمل تسأل عادي، وكل ما يخلص صفحات أكتر بجاوبك أدق.`; nd.append(p, btn("⏸ وقّف", () => { b.stop = true; }));
+    p.textContent = `📖 بقرا الكتاب… ${have} من ${b.n} صفحة — تقدر تسأل عادي`; const bar = document.createElement("i"); bar.className = "bkbar"; bar.style.setProperty("--p", Math.round(100 * have / Math.max(1, b.n)) + "%"); nd.append(p, bar, btn("⏸ وقّف", () => { b.stop = true; }));
   } else if (full) {
-    p.textContent = `📚 أنا قريت الكتاب كله (${have} صفحة). اسألني عن أي حاجة فيه وهقولك هي في أنهي صفحة.`; nd.append(p);
+    p.textContent = `✅ قريت الكتاب كله (${have} صفحة) — اسألني عن أي حاجة فيه`; nd.append(p);
   } else {
     p.textContent = have ? `📚 أنا قريت ${have} من ${b.n} صفحة في الكتاب ده، والباقي صور محتاجة قراءة بالـ OCR.` : `📚 الكتاب ده صور (مفيهوش نص)، فمحتاج أقراه بالـ OCR عشان أعرف اللي فيه.`;
     const sm = document.createElement("small"); sm.textContent = " بيشتغل في الخلفية، وممكن ياخد وقت حسب حجم الكتاب (سيب الصفحة مفتوحة)، وبيتحفظ في متصفحك فمش هتعيده.";
@@ -700,7 +712,7 @@ function bkRender(b, id) {
     nd.append(sel, btn(have ? "📖 ذاكر الباقي" : "📖 ذاكر الكتاب كله", () => bkStart(b, id)));
     if (LIB.length > 1 && !bkAll.run) nd.append(btn("📚 ذاكر كل كتبي", () => bkStartAll()));
   }
-  chatScroll();
+  bkShow(nd, !b.run && full);
 }
 async function bkStart(b, id) {
   const d = docs[id] || doc; let last = 0;
@@ -712,12 +724,12 @@ async function bkStart(b, id) {
 const bkAll = { run: false, stop: false, cur: null };
 let bkAllNode = null;
 function bkAllRender() {
-  if (!bkAllNode) { bkAllNode = document.createElement("div"); bkAllNode.className = "m a"; $("chat").append(bkAllNode); }
+  if (!bkAllNode) { bkAllNode = document.createElement("div"); bkAllNode.className = "bkst"; }
   const nd = bkAllNode, c = bkAll.cur; nd.textContent = "";
-  if (!bkAll.run) { nd.textContent = "✅ خلصت مذاكرة كل كتبك."; return; }
+  if (!bkAll.run) { nd.textContent = "✅ خلصت قراءة كل كتبك."; bkShow(nd, true); return; }
   nd.textContent = c ? `📚 بذاكر كل كتبك... دلوقتي: ${NAMES[c.id] || ""} (${c.i + 1} من ${c.m}) — ${bkHave(c.b)} من ${c.b.n} صفحة.` : "📚 بجهّز مذاكرة كل كتبك...";
   const x = document.createElement("button"); x.type = "button"; x.className = "bkbtn"; x.textContent = "⏸ وقّف"; x.onclick = () => { bkAll.stop = true; if (c) c.b.stop = true; }; nd.append(x);
-  chatScroll();
+  bkShow(nd, false);
 }
 async function bkStartAll() {
   if (bkAll.run) return; bkAll.run = true; bkAll.stop = false; bkAll.cur = null; bkAllRender(); let last = 0;
@@ -1018,7 +1030,7 @@ function place(spec) {
   } else {
     band.hidden = true; selBox.hidden = false;
     Object.assign(selBox.style, { left: spec.x0 * W + "px", top: spec.y0 * H + "px", width: (spec.x1 - spec.x0) * W + "px", height: (spec.y1 - spec.y0) * H + "px" });
-    const cw = Math.min(chip.offsetWidth || 330, W - 8); chip.style.right = "auto"; chip.style.left = clamp((spec.x0 + spec.x1) / 2 * W - cw / 2, 4, Math.max(4, W - cw - 4)) + "px"; chip.style.top = (spec.y0 * H >= 42 ? spec.y0 * H - 38 : Math.min(spec.y1 * H + 6, H - 38)) + "px";
+    const cw = Math.min(chip.offsetWidth || 330, W - 8); chip.style.right = "auto"; chip.style.left = clamp((spec.x0 + spec.x1) / 2 * W - cw / 2, 4, Math.max(4, W - cw - 4)) + "px"; chip.style.top = (spec.y1 * H + 50 <= H ? spec.y1 * H + 8 : Math.max(4, spec.y0 * H - 46)) + "px";
   }
 }
 const pgOf = e => e.target.closest?.(".pg");
@@ -1028,18 +1040,19 @@ P.addEventListener("pointermove", e => {
     if (Math.hypot((x - drag.x0) * W, (y - drag.y0) * H) > 12) { drag.on = true; chip.hidden = band.hidden = true; selBox.hidden = false;
       Object.assign(selBox.style, { left: Math.min(drag.x0, x) * W + "px", top: Math.min(drag.y0, y) * H + "px", width: Math.abs(x - drag.x0) * W + "px", height: Math.abs(y - drag.y0) * H + "px" }); }
     return; }
-  if (chip.contains(e.target) || pin || e.pointerType !== "mouse") return;
-  const el = pgOf(e); if (el) place({ type: "band", y: frac(e, el)[1], el, n: +el.dataset.n });
+  // (بالماوس مفيش شريط أصفر بيمشي ورا الماوس: اسحب مربع حوالين اللي عايزه وبس)
 });
 P.addEventListener("pointerdown", e => { if (chip.contains(e.target) || (e.pointerType === "mouse" && e.button !== 0)) return; const el = pgOf(e); if (!el) return; pin = null; const [x, y] = frac(e, el); drag = { el, x0: x, y0: y, x1: x, y1: y, on: false }; P.setPointerCapture?.(e.pointerId); });
 P.addEventListener("pointerup", e => {
   if (!drag) return; const d = drag, n = +d.el.dataset.n; drag = null; try { P.releasePointerCapture?.(e.pointerId); } catch {}
   cur.page = n; $("pn").value = n;
+  if (!d.on && e.pointerType === "mouse") { clearPin(); return; }   // دوسة عادية بالماوس = مفيش تحديد
   pin = d.on ? { type: "rect", el: d.el, n, x0: Math.min(d.x0, d.x1), y0: Math.min(d.y0, d.y1), x1: Math.max(d.x0, d.x1), y1: Math.max(d.y0, d.y1) } : { type: "band", y: d.y0, el: d.el, n };
   place(pin);
 });
 P.addEventListener("pointercancel", () => { drag = null; });
 P.addEventListener("pointerleave", e => { if (!pin && !drag && e.pointerType === "mouse") band.hidden = chip.hidden = true; });
+document.addEventListener("pointerdown", e => { if (pin && !e.target.closest?.("#chip,.pg")) clearPin(); });
 addEventListener("keydown", e => { if (e.key === "Escape") clearPin(); });
 chip.onclick = e => { const b = e.target.closest("button"); if (!b || !hoverSpec) return; const k = b.dataset.k;
   if (k === "kur") { const sp = hoverSpec; b.disabled = true; snap(sp, sp.n).then(url => window.KURASA?.addImage(url, { book: cur.id, page: sp.n })).catch(err => toast("⚠️ " + err.message)).finally(() => { b.disabled = false; clearPin(); }); return; }

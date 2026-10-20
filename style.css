@@ -772,3 +772,44 @@ body[data-tool=pen] #pages canvas.ink,body[data-tool=pencil] #pages canvas.ink,b
 .vcb button{font-size:12px;padding:4px 9px;background:var(--card);color:var(--main);border:1px solid var(--line);border-radius:8px;font-weight:600}
 .vcb button:hover{border-color:var(--main);background:var(--soft)}
 #chip{max-width:calc(100% - 8px);flex-wrap:wrap}
+
+/* ===== حالة قراءة الكتاب: شريط صغير فوق (app.js ← bkShow) ===== */
+#bkStatus{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--soft);border-bottom:1px solid var(--line);font-size:13px;color:var(--txt);min-width:0}
+#bkStatus[hidden]{display:none}
+#bkStatus.done{background:color-mix(in srgb,#16a34a 12%,var(--card))}
+.bkst{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.bkst>div{min-width:0}
+.bkst small{color:var(--muted)}
+.bkst .bkbtn{margin-top:0;padding:3px 12px;font-size:12px}
+.bkbar{display:block;flex:1 1 120px;max-width:260px;height:6px;border-radius:6px;background:var(--line);overflow:hidden;position:relative}
+.bkbar::after{content:"";position:absolute;inset:0 auto 0 0;width:var(--p,0%);background:var(--main);border-radius:6px;transition:width .3s}
+.bkx{flex:none;width:26px;height:26px;min-width:0;padding:0;border-radius:50%;background:transparent;color:var(--muted);border:0;font-size:12px}
+.bkx:hover{background:var(--card);color:var(--txt)}
+#viewer.alt>#bkStatus{display:none!important}
+
+/* ===== التحديد على الكتاب: مربع أزرق هادي + شريط أدوات صغير (بدل الشريط الأصفر) ===== */
+body[data-tool=select] #pages .pg{cursor:default}
+#sel{border:2px solid var(--main);background:color-mix(in srgb,var(--main) 9%,transparent);border-radius:6px}
+#band{background:color-mix(in srgb,var(--main) 10%,transparent);border-block:1.5px solid color-mix(in srgb,var(--main) 55%,transparent)}
+#chip{gap:2px;padding:4px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 28px rgba(15,23,42,.2)}
+#chip button,#chip button[data-k]{background:transparent;color:var(--txt);box-shadow:none;border-radius:8px;padding:6px 10px;font-weight:600}
+#chip button:hover,#chip button[data-k]:hover{background:var(--soft);color:var(--main)}
+#chip button[data-k="ask"]{background:var(--main);color:var(--on)}
+#chip button[data-k="ask"]:hover{background:var(--mainh);color:var(--on)}
+
+/* ===== شكل الشات أنضف ===== */
+/* الترحيب والاقتراحات بيختفوا أول ما المحادثة تبدأ */
+#chat:has(>.m.u)>.hello{display:none}
+/* رد المدرّس في كارت هادي، وصورته جوه الكارت */
+#chat>.m.a:not(.typing):not(.sys){background:var(--card2);border:1px solid var(--line);border-radius:16px;padding:14px 16px 8px;padding-inline-start:52px}
+#chat>.m.a:not(.typing):not(.sys)::before{inset-inline-start:13px;top:14px}
+#chat>.m.u{border-radius:16px 16px 4px 16px}
+/* أزرار تحت الرد: صف واحد هادي، ويوضحوا لما تقف على الرد */
+.acts{border-top:1px solid var(--line);margin-top:10px;padding-top:6px;opacity:.75;transition:opacity .15s}
+.m.a:hover .acts,.m.a:focus-within .acts{opacity:1}
+.acts .noteBtn{height:30px;display:inline-flex;align-items:center;gap:4px;padding:0 10px;margin:0;border:0;border-radius:9px;background:transparent;color:var(--muted);font-size:12px;font-weight:600}
+.acts .noteBtn:hover{background:var(--ab-h);color:var(--txt)}
+.acts .noteBtn:disabled{color:var(--cx-sum);opacity:1}
+.m.a .src{margin-top:8px}
+.chathead{padding:6px 12px 4px;background:var(--card)}
+@media(max-width:800px){#chat>.m.a:not(.typing):not(.sys){padding-inline-start:44px}#chat>.m.a:not(.typing):not(.sys)::before{inset-inline-start:10px}.acts{opacity:1}}

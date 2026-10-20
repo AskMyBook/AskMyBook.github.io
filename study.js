@@ -140,8 +140,8 @@
   new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1 && n.classList?.contains("m") && n.classList.contains("a")) setTimeout(() => decorate(n), 50); }))).observe($("chat"), { childList: true });
   function decorate(n) {
     if (n._noted || n.classList.contains("typing") || n.classList.contains("sys")) return; const acts = n.querySelector(":scope > .acts"); if (!acts) return; n._noted = true;
-    const b = document.createElement("button"); b.type = "button"; b.className = "noteBtn"; b.textContent = window.I18N?.lang === "en" ? "📝 Save as note" : "📝 احفظ كملاحظة"; b.title = "احفظ الرد ده في ملاحظاتك";
-    b.onclick = async () => { const t = (n._copy || n.innerText.replace(/📝 احفظ كملاحظة|نسخ|انسخ/g, "")).trim(); if (!t) return; const book = $("book").value || cur.id || ""; await S.addNote({ text: t, book, page: book && book === cur.id ? cur.page : 0, ai: true }); b.textContent = window.I18N?.lang === "en" ? "✅ Saved" : "✅ اتحفظت"; b.disabled = true; toast("📝 اتحفظت في ملاحظاتك (مركز المذاكرة ← الملاحظات)."); };
+    const b = document.createElement("button"); b.type = "button"; b.className = "noteBtn"; b.textContent = window.I18N?.lang === "en" ? "📝 Note" : "📝 ملاحظة"; b.title = "احفظ الرد ده في ملاحظاتك";
+    b.onclick = async () => { const t = (window.answerText ? window.answerText(n) : (n._copy || n.innerText)).trim(); if (!t) return; const book = $("book").value || cur.id || ""; await S.addNote({ text: t, book, page: book && book === cur.id ? cur.page : 0, ai: true }); b.textContent = window.I18N?.lang === "en" ? "✅ Saved" : "✅ اتحفظت"; b.disabled = true; toast("📝 اتحفظت في ملاحظاتك (مركز المذاكرة ← الملاحظات)."); };
     acts.append(b);
   }
   // الرد لسه بيتكتب وقت ما اتضاف: نزوّد الزرار لما يخلص

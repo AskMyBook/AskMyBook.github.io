@@ -84,7 +84,7 @@
     const url = c.toDataURL("image/jpeg", .88); window.TUTOR.attach([{ b64: url.split(",")[1], label: T("صفحة الكراسة") }]);
     return url;
   }
-  function lastAnswer() { const ms = [...$("chat").querySelectorAll(".m.a:not(.typing):not(.sys)")]; const m = ms.at(-1); return m ? (m._copy || m.innerText).replace(/📝 احفظ كملاحظة|📓 للكراسة|✅.*$/gm, "").trim() : ""; }
+  function lastAnswer() { const ms = [...$("chat").querySelectorAll(".m.a:not(.typing):not(.sys)")]; const m = ms.at(-1); return m ? window.answerText(m) : ""; }
 
   // ----- التوجيه -----
   const orig = window.TUTOR.handle.bind(window.TUTOR);
