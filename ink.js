@@ -3,7 +3,7 @@
 // عشان يفضل في مكانه مهما اتغير التكبير أو حجم الشاشة، وبيتحفظ في المتصفح (IndexedDB) لكل كتاب.
 const INK = { tool: "select", pc: "#e11d48", hc: "#facc15", size: 2, op: 0.4, ann: {}, bookId: null, undo: [], redo: [], editing: null, sel: null };
 const SHAPES = ["line", "arrow", "rect", "circle"], STROKES = ["pen", "hl", "pencil"];
-const PALETTE = ["#111827", "#e11d48", "#2563eb", "#16a34a", "#facc15", "#fb923c", "#a855f7"];
+const PALETTE = ["#111827", "#ffffff", "#e11d48", "#2563eb", "#16a34a", "#facc15", "#fb923c", "#a855f7"];
 const PEN_W = [0.0016, 0.003, 0.006], HL_W = [0.012, 0.02, 0.032], TXT_S = [0.016, 0.024, 0.036];
 const FONT = s => `600 ${s}px Cairo, Tahoma, Arial, sans-serif`;
 const inkColor = () => INK.tool === "hl" ? INK.hc : INK.pc;
@@ -203,7 +203,8 @@ function inkClear() {
 }
 
 // ----- شريط الأدوات -----
-function syncColors() { const c = inkColor(); document.querySelectorAll("#colors .cdot").forEach(d => d.classList.toggle("on", d.dataset.c === c)); }
+function syncColors() { const c = inkColor(); document.querySelectorAll("#colors .cdot[data-c]").forEach(d => d.classList.toggle("on", d.dataset.c === c));
+  const pk = $("inkPickDot"), custom = !PALETTE.includes(c); if (pk) { pk.classList.toggle("on", custom); pk.style.setProperty("--c", custom ? c : "transparent"); const i = $("inkPick"); if (i && /^#[0-9a-f]{6}$/i.test(c)) i.value = c; } }
 function setTool(t) {
   finishText(); INK.tool = t; document.body.dataset.tool = t; clearPin();
   if (t !== "move" && INK.sel) { const n = INK.sel.n; INK.sel = null; inkDraw(pageEl(n)); syncSel(); }
@@ -211,7 +212,9 @@ function setTool(t) {
   document.querySelectorAll("#tools [data-tool]").forEach(b => b.classList.toggle("on", b.dataset.tool === t)); syncColors();
   $("shapeBtn")?.classList.toggle("on", SHAPES.includes(t));
 }
-$("colors").innerHTML = PALETTE.map(c => `<button type="button" class="cdot" data-c="${c}" style="background:${c}" aria-label="لون"></button>`).join("");
+$("colors").innerHTML = PALETTE.map(c => `<button type="button" class="cdot" data-c="${c}" style="background:${c}" aria-label="لون" title="${c === "#ffffff" ? "أبيض" : c === "#111827" ? "أسود" : "لون"}"></button>`).join("")
+  + `<label class="cdot cpick" id="inkPickDot" title="اختار أي لون"><input type="color" id="inkPick" aria-label="اختار أي لون"></label>`;
+$("inkPick").addEventListener("input", e => { const c = e.target.value; if (INK.tool === "select" || INK.tool === "eraser") setTool("pen"); if (INK.tool === "hl") INK.hc = c; else INK.pc = c; syncColors(); });
 $("colors").onclick = e => {
   const c = e.target.dataset?.c; if (!c) return;
   if (INK.tool === "select" || INK.tool === "eraser") setTool("pen");

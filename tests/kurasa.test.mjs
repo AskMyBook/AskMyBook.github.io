@@ -59,6 +59,24 @@ try {
   ok("after reload: الكراسة is still open", await page.locator("#kPaper").isVisible());
   await page.click("#kPrev"); await sleep(500);
   ok("after reload: page 1 kept its title, text and drawing", (await page.inputValue("#kTitle")) === "ملخص الفيزيا" && /قانون نيوتن الأول/.test(await page.textContent("#kEd")) && await inkCount(page) === 1, { t: await page.inputValue("#kTitle"), x: await page.textContent("#kEd") });
+  // الألوان: أسود وأبيض ظاهرين، وأي لون من المنتقي، ولون الورقة
+  ok("black and white are in the notebook colors", await page.locator('#kur [data-color="#111111"]').isVisible() && await page.locator('#kur [data-color="#ffffff"]').isVisible());
+  await page.click('[data-tool="pen"]'); await page.locator("#kPick").evaluate(el => { el.value = "#ff00aa"; el.dispatchEvent(new Event("input", { bubbles: true })); });
+  const b3 = await page.locator("#kCv").boundingBox(); await page.mouse.move(b3.x + 120, b3.y + 420); await page.mouse.down(); await page.mouse.move(b3.x + 260, b3.y + 430, { steps: 6 }); await page.mouse.up(); await sleep(900);
+  const lastC = await page.evaluate(async () => { const p = ((await idbGet("nb")) || []).find(x => x.id === localStorage.getItem("kur.page")); return p?.ink?.at(-1)?.c; });
+  ok("a color from the picker is used by the pen", lastC === "#ff00aa", lastC);
+  ok("the picker dot shows the custom color as selected", await page.locator("#kur .kcol .kpick.on").count() === 1);
+  await page.click("#kPaperBtn"); await page.click('[data-paper="#111111"]'); await sleep(900);
+  const look = await page.evaluate(() => { const p = document.getElementById("kPaper"), bg = document.getElementById("kBg"), d = bg.getContext("2d").getImageData(5, 5, 1, 1).data; return { paper: p.style.getPropertyValue("--kpaper"), ink: p.style.getPropertyValue("--kink"), px: [...d.slice(0, 3)] }; });
+  ok("black paper: background repainted and typed text turns light", look.paper === "#111111" && look.ink === "#f2f4fa" && look.px.every(v => v < 40), look);
+  await page.reload(); await sleep(1500);
+  ok("paper color is saved with the page", await page.evaluate(() => document.getElementById("kPaper").style.getPropertyValue("--kpaper")) === "#111111");
+  await page.click("#kPaperBtn"); await page.click('[data-paper="auto"]'); await sleep(700);
+  ok("«تلقائي» goes back to the theme paper", await page.evaluate(() => document.getElementById("kPaper").style.getPropertyValue("--kpaper")) === "");
+  // ناحية الـ PDF: أبيض + أي لون
+  ok("PDF tools have white and a «pick any color» button", await page.locator('#colors [data-c="#ffffff"]').count() === 1 && await page.locator("#inkPick").count() === 1);
+  await page.locator("#inkPick").evaluate(el => { el.value = "#00b3a4"; el.dispatchEvent(new Event("input", { bubbles: true })); });
+  ok("picking a color on the PDF side switches to the pen with that color", await page.evaluate(() => INK.pc === "#00b3a4" && INK.tool === "pen"));
   // مركز المذاكرة
   await page.click("#hubBtn"); await sleep(300); await page.click('[data-h="notebook"]'); await sleep(500);
   ok("الكراسة pages show in «📓 النوت بوك»", /ملخص الفيزيا/.test(await page.textContent(".nblist")));

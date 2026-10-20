@@ -3,7 +3,9 @@
 // صفحات الكراسة هي نفس صفحات «📓 النوت بوك» في مركز المذاكرة (مفتاح «nb»)، ومعاها رسم القلم (ink) — وبتتزامن مع الحساب.
 (() => {
   const W = 800, LH = 40, TOP = 40, MINH = 1120;
-  const COLORS = [["#1d2a5b", "أزرق غامق"], ["#1565c0", "أزرق"], ["#c62828", "أحمر"], ["#2e7d32", "أخضر"]];
+  const COLORS = [["#111111", "أسود"], ["#ffffff", "أبيض"], ["#1d2a5b", "أزرق غامق"], ["#1565c0", "أزرق"], ["#c62828", "أحمر"], ["#2e7d32", "أخضر"]];
+  // لون الورقة: «تلقائي» بيمشي مع الوضع الفاتح/الغامق، أو لون ثابت تختاره (السطور والهامش ولون الكتابة بيتظبطوا عليه)
+  const PAPERS = [["auto", "تلقائي"], ["#fffefa", "كريمي"], ["#ffffff", "أبيض"], ["#fff6cc", "أصفر"], ["#e6f1ff", "أزرق فاتح"], ["#e7f6e7", "أخضر فاتح"], ["#fde9f0", "وردي"], ["#2b303b", "رمادي غامق"], ["#111111", "أسود"]];
   const SIZES = [[2, "رفيع"], [3.5, "متوسط"], [6, "تخين"]];
   const T = s => window.I18N?.t(s) || s;
   const ls = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
@@ -58,7 +60,7 @@
   async function load() { PAGES = ((await idbGet("nb")) || []).filter(p => p && !p.del); PAGES.sort((a, b) => (a.created || 0) - (b.created || 0)); }
   async function save() {
     const pg = page(); if (!pg || !dirty) return; dirty = false; clearTimeout(saveT); saveT = 0;
-    pg.html = clean(ed.innerHTML); pg.title = ($("kTitle").value.trim() || T("صفحة")).slice(0, 120); pg.h = H; pg.updated = Date.now();
+    pg.html = clean(ed.innerHTML); pg.title = ($("kTitle").value.trim() || T("صفحة")).slice(0, 120); pg.h = H; pg.paper = pg.paper || ""; pg.updated = Date.now();
     const all = (await idbGet("nb")) || [], i = all.findIndex(x => x.id === pg.id); if (i >= 0) all[i] = { ...all[i], ...pg }; else all.push(pg);
     await window.idbSet("nb", all); window.dispatchEvent(new CustomEvent("study-data", { detail: { key: "nb", from: "kur" } }));
     const st = $("kState"); if (st) st.textContent = "✓ " + T("اتحفظ");
@@ -68,7 +70,7 @@
   addEventListener("pagehide", K.flush);
   async function newPage() {
     const n = PAGES.length + 1, b = (typeof cur !== "undefined" && cur.id) || $("book")?.value || "";
-    const pg = { id: uid(), title: T("صفحة") + " " + n, html: "", ink: [], book: b, h: MINH, created: Date.now(), updated: Date.now() };
+    const lp = ls.get("kur.paper", "auto"), pg = { id: uid(), title: T("صفحة") + " " + n, html: "", ink: [], book: b, h: MINH, paper: lp === "auto" ? "" : lp, created: Date.now(), updated: Date.now() };
     PAGES.push(pg); CUR = pg.id; const all = (await idbGet("nb")) || []; all.push(pg); await window.idbSet("nb", all);
     window.dispatchEvent(new CustomEvent("study-data", { detail: { key: "nb", from: "kur" } })); return pg;
   }
@@ -79,12 +81,15 @@
     const tb = (t, l, title, extra = "") => `<button type="button" class="ktool" data-tool="${t}" title="${T(title)}" aria-label="${T(title)}"${extra}>${l}</button>`;
     kur.innerHTML = `<div class="kbar" role="toolbar" aria-label="${T("أدوات الكراسة")}">
         <div class="kgrp">${tb("pen", "✍️", "قلم")}${tb("hl", "🖍️", "هايلايتر")}${tb("erase", "🧽", "ممحاة")}${tb("type", "⌨️", "كتابة بالكيبورد")}</div>
-        <div class="kgrp kcol">${COLORS.map(([c, n]) => `<button type="button" class="kdot" data-color="${c}" style="--c:${c}" title="${T(n)}" aria-label="${T(n)}"></button>`).join("")}</div>
+        <div class="kgrp kcol">${COLORS.map(([c, n]) => `<button type="button" class="kdot" data-color="${c}" style="--c:${c}" title="${T(n)}" aria-label="${T(n)}"></button>`).join("")}<label class="kdot kpick" title="${T("اختار أي لون")}"><input type="color" id="kPick" aria-label="${T("اختار أي لون")}"></label></div>
         <div class="kgrp ksz">${SIZES.map(([s, n]) => `<button type="button" class="ksize" data-size="${s}" title="${T(n)}" aria-label="${T(n)}"><i style="width:${s * 2 + 2}px;height:${s * 2 + 2}px"></i></button>`).join("")}</div>
         <div class="kgrp"><button type="button" class="ktool" id="kUndo" title="${T("تراجع")}" aria-label="${T("تراجع")}">↶</button><button type="button" class="ktool" id="kRedo" title="${T("إعادة")}" aria-label="${T("إعادة")}">↷</button></div>
       </div>
       <div class="kbar knav"><button type="button" class="ktool" id="kPrev" title="${T("الصفحة اللي قبلها")}" aria-label="${T("الصفحة اللي قبلها")}">›</button><span id="kNum" class="knum"></span><button type="button" class="ktool" id="kNext" title="${T("الصفحة اللي بعدها")}" aria-label="${T("الصفحة اللي بعدها")}">‹</button>
         <input id="kTitle" class="ktitle" maxlength="120" aria-label="${T("عنوان الصفحة")}"><small id="kState" class="kstate"></small>
+        <button type="button" class="ktool" id="kPaperBtn" title="${T("لون الورقة")}" aria-label="${T("لون الورقة")}" aria-haspopup="true"><i class="kpchip"></i></button>
+        <div id="kPaperMenu" class="kmenu kpmenu" hidden><b>${T("لون الورقة")}</b><div class="kpgrid">${PAPERS.map(([c, n]) => `<button type="button" class="kpsw${c === "auto" ? " kauto" : ""}" data-paper="${c}" style="--p:${c === "auto" ? "transparent" : c}" title="${T(n)}" aria-label="${T(n)}">${c === "auto" ? "A" : ""}</button>`).join("")}<label class="kpsw kpick" title="${T("اختار أي لون")}"><input type="color" id="kPaperPick" aria-label="${T("لون ورقة تاني")}"></label></div>
+          <label class="kchk"><input type="checkbox" id="kPaperAll"> ${T("طبّقه على كل الصفحات")}</label></div>
         <button type="button" class="ktool" id="kAdd" title="${T("صفحة جديدة")}" aria-label="${T("صفحة جديدة")}">＋</button><button type="button" class="ktool" id="kMore" title="${T("مسح")}" aria-label="${T("مسح")}" aria-haspopup="true">🗑️</button>
         <div id="kMenu" class="kmenu" hidden><button type="button" data-k="clearInk">${T("امسح رسم القلم في الصفحة دي")}</button><button type="button" data-k="clearAll">${T("فضّي الصفحة كلها")}</button><button type="button" data-k="delPage" class="kdanger">${T("امسح الصفحة نهائيًا")}</button></div>
       </div>
@@ -102,8 +107,16 @@
     $("kPrev").onclick = () => go(-1); $("kNext").onclick = () => go(1);
     $("kAdd").onclick = async () => { await K.flush(); await newPage(); open(); };
     $("kTitle").oninput = later;
-    $("kMore").onclick = e => { e.stopPropagation(); $("kMenu").hidden = !$("kMenu").hidden; };
-    document.addEventListener("click", e => { if (!e.target.closest?.("#kMenu,#kMore")) { const m = $("kMenu"); if (m) m.hidden = true; } });
+    $("kMore").onclick = e => { e.stopPropagation(); $("kPaperMenu").hidden = true; $("kMenu").hidden = !$("kMenu").hidden; };
+    $("kPaperBtn").onclick = e => { e.stopPropagation(); $("kMenu").hidden = true; $("kPaperMenu").hidden = !$("kPaperMenu").hidden; };
+    document.addEventListener("click", e => { if (!e.target.closest?.("#kMenu,#kMore,#kPaperMenu,#kPaperBtn")) { const m = $("kMenu"), pm = $("kPaperMenu"); if (m) m.hidden = true; if (pm) pm.hidden = true; } });
+    $("kPick").addEventListener("input", e => { COLOR = e.target.value; ls.set("kur.color", COLOR); if (TOOL === "erase") TOOL = "pen"; if (TOOL === "type" && document.activeElement === ed) document.execCommand("foreColor", false, COLOR); tools(); });
+    const setPaper = async c => { const pg = page(); if (!pg) return; ls.set("kur.paper", c);
+      const targets = $("kPaperAll").checked ? PAGES : [pg]; for (const x of targets) x.paper = c === "auto" ? "" : c;
+      paperLook(); lines(); dirty = true; if (targets.length > 1) { const all = (await idbGet("nb")) || []; for (const x of all) if (targets.some(t => t.id === x.id)) x.paper = c === "auto" ? "" : c; await window.idbSet("nb", all); }
+      later(); };
+    $("kPaperMenu").addEventListener("click", e => { const b = e.target.closest("[data-paper]"); if (b) setPaper(b.dataset.paper); });
+    $("kPaperPick").addEventListener("input", e => setPaper(e.target.value));
     $("kMenu").onclick = async e => {
       const k = e.target.closest("[data-k]")?.dataset.k, pg = page(); if (!k || !pg) return; $("kMenu").hidden = true;
       if (k === "clearInk") { undo.push(JSON.stringify(pg.ink || [])); pg.ink = []; draw(); later(); }
@@ -122,6 +135,7 @@
   function tools() {
     kur.querySelectorAll("[data-tool]").forEach(b => b.classList.toggle("on", b.dataset.tool === TOOL));
     kur.querySelectorAll("[data-color]").forEach(b => b.classList.toggle("on", b.dataset.color === COLOR));
+    const pk = kur.querySelector(".kcol .kpick"), custom = !COLORS.some(([c]) => c === COLOR); pk.classList.toggle("on", custom); pk.style.setProperty("--c", custom ? COLOR : "transparent"); $("kPick").value = /^#[0-9a-f]{6}$/i.test(COLOR) ? COLOR : "#000000";
     kur.querySelectorAll("[data-size]").forEach(b => b.classList.toggle("on", +b.dataset.size === SIZE));
     const typing = TOOL === "type"; ed.contentEditable = typing ? "true" : "false"; paper.classList.toggle("typing", typing); paper.dataset.tool = TOOL;
     if (typing) { ed.focus(); }
@@ -132,7 +146,7 @@
     ed.innerHTML = clean(pg.html); $("kTitle").value = pg.title || ""; $("kState").textContent = "";
     const i = PAGES.findIndex(p => p.id === CUR); $("kNum").textContent = `${(i + 1).toLocaleString("ar-EG")} / ${PAGES.length.toLocaleString("ar-EG")}`;
     $("kPrev").disabled = i <= 0; $("kNext").disabled = i >= PAGES.length - 1;
-    H = Math.max(MINH, pg.h || 0); ls.set("kur.page", CUR); tools(); layout(); grow(); $("kScroll").scrollTop = 0;
+    H = Math.max(MINH, pg.h || 0); ls.set("kur.page", CUR); paperLook(); tools(); layout(); grow(); $("kScroll").scrollTop = 0;
   }
   // الورقة بتطول لوحدها لما الكتابة أو الرسم يوصلوا لآخرها
   function grow() {
@@ -147,6 +161,21 @@
     wrap.style.width = W * scale + "px"; wrap.style.height = H * scale + "px";
     const k = Math.min(3, (devicePixelRatio || 1) * scale); cv.width = Math.round(W * k); cv.height = Math.round(H * k); cv.style.width = W + "px"; cv.style.height = H + "px";
     ctx.setTransform(k, 0, 0, k, 0, 0); lines(k); draw();
+  }
+  // ألوان الورقة: لون ثابت → السطور والهامش ولون الكتابة بيتحسبوا منه (ورقة غامقة = سطور فاتحة وكتابة بيضا)
+  const hexRgb = h => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ""); if (!m) return null; const n = parseInt(m[1], 16); return [n >> 16, n >> 8 & 255, n & 255]; };
+  const mix = (a, b, t) => "#" + a.map((v, i) => Math.round(v + (b[i] - v) * t).toString(16).padStart(2, "0")).join("");
+  const lum = ([r, g, b]) => (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  function paperLook() {
+    const pg = page(), c = hexRgb(pg?.paper), st = paper.style;
+    for (const v of ["--kpaper", "--kline", "--kmargin", "--kink"]) st.removeProperty(v);
+    if (c) { const dark = lum(c) < 0.45; st.setProperty("--kpaper", pg.paper); st.setProperty("--kline", dark ? mix(c, [255, 255, 255], .2) : mix(c, [59, 111, 208], .22));
+      st.setProperty("--kmargin", dark ? "#d27a7a" : "#e57373"); st.setProperty("--kink", dark ? "#f2f4fa" : "#1d2a5b"); }
+    paper.classList.toggle("kdark", c ? lum(c) < 0.45 : false);
+    kur.querySelectorAll("[data-paper]").forEach(b => b.classList.toggle("on", (b.dataset.paper === "auto" && !c) || b.dataset.paper === pg?.paper));
+    const pp = kur.querySelector(".kpgrid .kpick"), custom = c && !PAPERS.some(([x]) => x === pg.paper); pp.classList.toggle("on", !!custom); pp.style.setProperty("--c", custom ? pg.paper : "transparent");
+    if (c) $("kPaperPick").value = pg.paper;
+    $("kPaperBtn").querySelector(".kpchip").style.background = c ? pg.paper : "var(--kpaper)";
   }
   // السطور والهامش مترسومين على canvas (مش CSS) عشان المسافات تفضل متساوية بالظبط مع أي تكبير
   function lines(k = Math.min(3, (devicePixelRatio || 1) * scale)) {

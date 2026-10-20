@@ -674,3 +674,23 @@ body.side-kur #kur{display:flex}
 .kpaper.typing canvas{pointer-events:none}
 .kpaper.typing .ked{cursor:text}
 @media(max-width:800px){.kbar{padding:6px 8px;gap:5px}.ktool{min-width:32px}.kscroll{padding:10px 6px 30px}}
+
+/* ===== اختيار أي لون (الـ PDF والكراسة) + لون الورقة ===== */
+.cpick,.kpick{position:relative;display:inline-block;overflow:hidden;cursor:pointer;
+  background:conic-gradient(#ef4444,#f59e0b,#eab308,#22c55e,#06b6d4,#3b82f6,#a855f7,#ec4899,#ef4444)!important}
+.cpick::after,.kpick::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--c,transparent)}
+.cpick input,.kpick input{position:absolute;inset:-6px;width:calc(100% + 12px);height:calc(100% + 12px);opacity:0;cursor:pointer;border:0;padding:0}
+.cpick:focus-within,.kpick:focus-within{outline:2px solid var(--main);outline-offset:2px}
+.cdot[data-c="#ffffff"],.kdot[data-color="#ffffff"]{box-shadow:0 0 0 1px #9aa3b8,inset 0 0 0 1px #d5dae6}
+.cdot.on[data-c="#ffffff"],.kdot.on[data-color="#ffffff"]{box-shadow:0 0 0 2px var(--main),inset 0 0 0 1px #c5ccdb}
+.kcol{flex-wrap:wrap}
+.kpchip{display:block;width:18px;height:18px;border-radius:5px;border:1.5px solid var(--muted)}
+.kpmenu{min-width:250px;gap:8px;padding:10px 12px}
+.kpmenu>b{font-size:13px;color:var(--muted);font-weight:600}
+.kpgrid{display:grid;grid-template-columns:repeat(5,36px);gap:8px}
+.kpsw{width:36px;height:36px;min-width:0;padding:0;border-radius:9px;background:var(--p);border:1px solid var(--line);box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);font-weight:700;font-size:13px;color:var(--muted)}
+.kpsw.kauto{background:linear-gradient(135deg,#fffefa 50%,#1a2033 50%)!important;color:#888;text-shadow:0 0 3px #fff}
+.kpsw.on{box-shadow:0 0 0 2px var(--main)}
+.kpsw.kpick{border-radius:9px}
+.kpsw.kpick::after{border-radius:6px}
+.kchk{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--txt)}
