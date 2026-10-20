@@ -565,5 +565,6 @@
     return ok;
   };
   S._EX = EX;   // للاختبارات
+  S.nbClean = nbClean;
   window.STUDY = S;
 })();

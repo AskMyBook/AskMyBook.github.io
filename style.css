@@ -612,3 +612,65 @@ header{padding-top:calc(10px + env(safe-area-inset-top,0px))}
 .nbed h2{font-size:19px;margin:6px 0}.nbed ul,.nbed ol{margin:4px 0;padding-inline-start:24px}
 .nbed a[data-go]{color:var(--main);font-weight:600;text-decoration:none;background:var(--soft);border-radius:6px;padding:0 6px}
 @media (max-width:760px){.nbwrap{grid-template-columns:1fr}.nblist{max-height:none;flex-direction:row;overflow-x:auto}.nbitem{min-width:180px}}
+
+/* ===== اللوحة الجانبية: المساعد / الكراسة / مقفولة ===== */
+.sidehead{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--card)}
+.seg{flex:1;display:flex;gap:4px;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:3px}
+.seg button{flex:1;background:transparent;color:var(--muted);border:0;border-radius:9px;padding:7px 10px;font-weight:600;font-size:14px}
+.seg button.on{background:var(--card);color:var(--main);box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.seg button:hover:not(.on){color:var(--txt)}
+#kur{display:none;flex:1;min-height:0;flex-direction:column}
+body.side-kur #chat,body.side-kur #form,body.side-kur .chathead{display:none!important}
+body.side-kur #kur{display:flex}
+#sideBtn.on{color:var(--main)}
+@media(min-width:801px){
+  body.side-off #side{display:none}
+  body.side-off #viewer{flex:1}
+  body.side-kur #side{max-width:760px;flex:1.1}
+}
+@media(max-width:800px){
+  #sideClose,#sideBtn{display:none}
+  .sidehead{display:none}
+  .show-kur #side{display:flex}
+}
+
+/* ===== الكراسة ===== */
+.kbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--card)}
+.kgrp{display:flex;align-items:center;gap:3px;padding:2px;border-radius:10px;background:var(--card2);border:1px solid var(--line)}
+.ktool{min-width:34px;height:32px;padding:0 8px;background:transparent;color:var(--txt);border:0;border-radius:8px;font-size:16px;line-height:1}
+.ktool:hover{background:var(--soft)}
+.ktool.on{background:var(--main);color:var(--on)}
+.ktool:disabled{opacity:.35}
+.kdot{width:26px;height:26px;min-width:0;padding:0;border-radius:50%;background:var(--c);border:2px solid var(--card);box-shadow:0 0 0 1px var(--line)}
+.kdot.on{box-shadow:0 0 0 2px var(--main)}
+.ksize{width:30px;height:30px;min-width:0;padding:0;display:grid;place-items:center;background:transparent;border:0;border-radius:8px}
+.ksize i{display:block;border-radius:50%;background:var(--txt)}
+.ksize.on{background:var(--soft);box-shadow:inset 0 0 0 1.5px var(--main)}
+.knav{position:relative;gap:6px}
+.knum{font-size:13px;color:var(--muted);min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
+.ktitle{flex:1;min-width:120px;border:1px solid transparent;background:transparent;border-radius:8px;padding:5px 8px;font-weight:700;font-size:15px;color:var(--txt)}
+.ktitle:hover,.ktitle:focus{border-color:var(--line);background:var(--card2);outline:none}
+.kstate{color:var(--muted);font-size:12px}
+.kmenu{position:absolute;top:100%;inset-inline-end:8px;z-index:5;display:flex;flex-direction:column;min-width:220px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.15);padding:6px}
+.kmenu button{background:transparent;color:var(--txt);border:0;text-align:start;padding:9px 12px;border-radius:8px;font-weight:500;justify-content:flex-start}
+.kmenu button:hover{background:var(--soft)}
+.kmenu .kdanger{color:var(--danger)}
+.kscroll{flex:1;min-height:0;overflow:auto;padding:14px 12px 40px;background:var(--bg)}
+.kwrap{position:relative;margin:0 auto}
+/* الورقة: سطور زرقا فاتحة وهامش أحمر على اليمين زي كراسة المدرسة */
+.kpaper{--kline:#c9d7ee;--kmargin:#e57373;--kpaper:#fffefa;--kink:#1d2a5b;
+  position:absolute;top:0;left:0;width:800px;transform-origin:top left;background-color:var(--kpaper);border-radius:6px;overflow:hidden;box-shadow:0 2px 10px rgba(20,30,60,.12),0 0 0 1px rgba(20,30,60,.06)}
+#kBg{position:absolute;top:0;left:0;pointer-events:none}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .kpaper{--kline:#33405e;--kmargin:#a14848;--kpaper:#1a2033;--kink:#dfe5f6}}
+:root[data-theme=dark] .kpaper{--kline:#33405e;--kmargin:#a14848;--kpaper:#1a2033;--kink:#dfe5f6}
+.ked{position:absolute;top:40px;right:100px;left:36px;min-height:80px;font-size:23px;line-height:40px;color:var(--kink);outline:none;overflow-wrap:anywhere;white-space:pre-wrap;caret-color:var(--main)}
+.ked:empty::before{content:attr(data-ph);color:var(--muted);opacity:.7}
+.kpaper:not(.typing) .ked:empty::before{content:""}
+.ked h2,.ked h3,.ked p,.ked ul,.ked ol,.ked blockquote{margin:0;font-size:inherit;line-height:40px}
+.ked h2{font-weight:800}.ked ul,.ked ol{padding-inline-start:28px}
+.ked a[data-go]{color:var(--main);font-weight:600;text-decoration:none}
+.kpaper canvas{position:absolute;top:0;left:0;touch-action:none;cursor:crosshair}
+.kpaper[data-tool=erase] canvas{cursor:cell}
+.kpaper.typing canvas{pointer-events:none}
+.kpaper.typing .ked{cursor:text}
+@media(max-width:800px){.kbar{padding:6px 8px;gap:5px}.ktool{min-width:32px}.kscroll{padding:10px 6px 30px}}
