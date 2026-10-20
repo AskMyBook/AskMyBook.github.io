@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>جدول مذاكرة أولى ثانوي</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@500;700&family=Noto+Naskh+Arabic:wght@400;600;700&display=swap">
+<style>
+/* Layout: a school notebook page (كراسة) — ruled lines, red margin, weekly grid as rows of days */
+:root{
+  --paper:#fbfaf6; --line:#dfe6f0; --ink:#1f2f57; --muted:#5d6a86; --margin:#d6453d; --card:#ffffff;
+  --math:#2f6fd0; --ar:#1d8a5b; --en:#b8601c; --sci:#7b4cc2; --hist:#9a6b1f; --phil:#c23a6b; --rel:#3b8c8c; --l2:#6b7a99;
+  --display:"Reem Kufi","Noto Naskh Arabic",Tahoma,sans-serif;
+  --body:"Noto Naskh Arabic",Tahoma,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#141a26; --line:#222c3d; --ink:#e4e9f4; --muted:#9aa6bf; --margin:#e3655d; --card:#1b2332;
+  --math:#6fa2f0; --ar:#4cc28e; --en:#e6935a; --sci:#a985e6; --hist:#d3a457; --phil:#e7739e; --rel:#62bcbc; --l2:#9aa8c4; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#141a26; --line:#222c3d; --ink:#e4e9f4; --muted:#9aa6bf; --margin:#e3655d; --card:#1b2332;
+  --math:#6fa2f0; --ar:#4cc28e; --en:#e6935a; --sci:#a985e6; --hist:#d3a457; --phil:#e7739e; --rel:#62bcbc; --l2:#9aa8c4; color-scheme:dark}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.7;
+  background-image:repeating-linear-gradient(to bottom,transparent 0 31px,var(--line) 31px 32px);}
+.page{direction:rtl;max-width:1000px;margin:0 auto;padding-block:28px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  border-right:2px solid var(--margin);}
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:end;justify-content:space-between;margin-bottom:20px}
+h1{font-family:var(--display);font-size:clamp(1.7rem,5vw,2.4rem);margin:0;line-height:1.2;text-wrap:balance}
+.sub{color:var(--muted);margin:4px 0 0}
+.progress{min-width:200px;flex:0 1 260px}
+.bar{height:10px;border-radius:6px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--ar);transition:width .3s}
+.ptxt{font-size:.9rem;color:var(--muted);margin-top:4px;font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px;padding:0;list-style:none}
+.legend li{display:flex;gap:6px;align-items:center;font-size:.88rem;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:2px 12px}
+.legend b{width:10px;height:10px;border-radius:50%;background:var(--c)}
+.legend small{color:var(--muted);font-variant-numeric:tabular-nums}
+.week{display:grid;gap:10px;max-width:640px}
+.day{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:stretch}
+.dname{font-family:var(--display);font-size:1.15rem;display:flex;align-items:center}
+.slots{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+.slot{position:relative;background:var(--card);border:1px solid var(--line);border-inline-start:4px solid var(--c);
+  border-radius:8px;padding:8px 12px;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0}
+.slot input{position:absolute;inset-inline-end:10px;top:10px;width:18px;height:18px;accent-color:var(--c);cursor:pointer}
+.slot .t{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.slot .s{font-weight:700;color:var(--c)}
+.slot .n{font-size:.85rem;color:var(--muted)}
+.slot:has(input:checked){opacity:.55}
+.slot:has(input:checked) .s{text-decoration:line-through}
+.slot:focus-within{outline:2px solid var(--c);outline-offset:2px}
+.tips{margin-top:28px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 18px}
+.tips h2{font-family:var(--display);font-size:1.2rem;margin:0 0 6px}
+.tips ul{margin:0;padding-inline-start:20px;max-width:65ch}
+.reset{margin-top:14px;font:inherit;font-size:.9rem;background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:4px 14px;cursor:pointer}
+.reset:focus-visible{outline:2px solid var(--ink)}
+@media (max-width:700px){
+  .day{grid-template-columns:1fr;gap:4px}
+  .slots,.friday .slots{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+<style>*{box-sizing:border-box}body{margin:0}</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <h1>جدول مذاكرة أولى ثانوي</h1>
+      <p class="sub">منهج مصري · الترم الأول 2026/2027 · علّم على الحصة لما تخلّصها</p>
+    </div>
+    <div class="progress" aria-live="polite">
+      <div class="bar"><i id="fill"></i></div>
+      <div class="ptxt" id="ptxt">0 من 0 حصة</div>
+    </div>
+  </header>
+
+  <ul class="legend" id="legend"></ul>
+  <div class="week" id="week"></div>
+
+  <section class="tips">
+    <h2>نصايح سريعة</h2>
+    <ul>
+      <li>العربي عليه 80 درجة، فادّيله تركيز زيادة.</li>
+      <li>الرياضيات والعلوم المتكاملة: حل مسائل كل يوم، مش قراءة بس.</li>
+      <li>خلي آخر 10 دقايق من كل حصة مراجعة لدرس امبارح.</li>
+      <li>الجمعة إجازة، ارتاح فيها وارجع السبت بنشاط.</li>
+      <li>ذاكر بعد ما ترتاح من المدرسة، وغيّر الميعاد على حسب الدروس.</li>
+    </ul>
+    <button class="reset" id="reset" type="button">ابدأ أسبوع جديد</button>
+  </section>
+</div>
+
+<script>
+const S={
+  math:{n:"رياضيات",c:"--math",d:60},
+  ar:{n:"لغة عربية",c:"--ar",d:80},
+  en:{n:"إنجليزي",c:"--en",d:60},
+  sci:{n:"علوم متكاملة",c:"--sci",d:60},
+  hist:{n:"تاريخ",c:"--hist",d:60},
+  phil:{n:"فلسفة ومنطق",c:"--phil",d:60}
+};
+const T=["5:00 – 7:00"];
+const W=[
+ ["السبت",[["ar","نحو + قراءة + نصوص"]]],
+ ["الأحد",[["math","الدرس الجديد + حل تمارين"]]],
+ ["الاثنين",[["en","Vocabulary + Grammar + Reading"]]],
+ ["الثلاثاء",[["sci","مذاكرة الدرس + حل أسئلة"]]],
+ ["الأربعاء",[["hist","قراءة وتلخيص + خرايط وتواريخ"]]],
+ ["الخميس",[["phil","فهم الدرس + تدريب على المنطق"]]]
+];
+
+const key="study-g10-v3";
+let done={};
+try{done=JSON.parse(localStorage.getItem(key)||"{}")}catch(e){}
+const save=()=>{try{localStorage.setItem(key,JSON.stringify(done))}catch(e){}};
+
+const leg=document.getElementById("legend");
+Object.values(S).filter(s=>s.d).forEach(s=>{
+  const li=document.createElement("li");li.style.setProperty("--c",`var(${s.c})`);
+  li.innerHTML=`<b></b>${s.n} <small>${s.d?s.d+" درجة":"نجاح ورسوب"}</small>`;leg.append(li);
+});
+
+const week=document.getElementById("week");
+function slot(id,time,sub,note){
+  const s=S[sub];const l=document.createElement("label");l.className="slot";l.style.setProperty("--c",`var(${s.c})`);
+  l.innerHTML=`<input type="checkbox" id="${id}"><span class="t">${time}</span><span class="s">${s.n}</span><span class="n">${note}</span>`;
+  const cb=l.querySelector("input");cb.checked=!!done[id];
+  cb.addEventListener("change",()=>{done[id]=cb.checked;save();upd()});
+  return l;
+}
+W.forEach(([d,items],i)=>{
+  const row=document.createElement("div");row.className="day";
+  row.innerHTML=`<div class="dname">${d}</div>`;const sl=document.createElement("div");sl.className="slots";
+  items.forEach(([sub,note],j)=>sl.append(slot(`d${i}s${j}`,T[j],sub,note)));
+  row.append(sl);week.append(row);
+});
+
+function upd(){
+  const all=[...document.querySelectorAll(".slot input")];const c=all.filter(x=>x.checked).length;
+  document.getElementById("fill").style.width=(c/all.length*100)+"%";
+  document.getElementById("ptxt").textContent=`${c} من ${all.length} حصة`;
+}
+document.getElementById("reset").addEventListener("click",()=>{
+  done={};save();document.querySelectorAll(".slot input").forEach(x=>x.checked=false);upd();
+});
+upd();
+</script>
+</body>
+</html>
