@@ -114,7 +114,10 @@ try {
   // ===== مهارات المساعد: فيديوهات =====
   await ask(page, "حيبلي فيديوهات يوتيوب عن قانون نيوتن التاني"); await sleep(1500);
   ok("«هاتلي فيديوهات…» in the chat shows video cards", await page.locator("#chat .vchat .vc").count() === 2, await page.locator("#chat").innerText().then(t => t.slice(-300)));
-  ok("…searched for the topic only", lastQ === "قانون نيوتن التاني", lastQ);
+  ok("…searched for the topic (+ the book name for context)", lastQ.startsWith("قانون نيوتن التاني") && !/هات|حيبلي|فيديو|يوتيوب/.test(lastQ), lastQ);
+  const t1 = await page.evaluate(() => SKILLS.videoTopic("عايز فيديو عن الدرس الاول في الكتاب ده"));
+  ok("«الدرس الاول في الكتاب ده» → the real first lesson name from the book", /Lesson 1|Newton/i.test(t1) && !/الكتاب ده|الدرس الاول/.test(t1), t1);
+  ok("the «open on YouTube» fallback is a real link, not raw markdown", await page.evaluate(() => !document.getElementById("chat").innerText.includes("](http")));
   await page.click('#chat .vc >> nth=0 >> [data-play="main"] >> nth=1'); await sleep(600);
   ok("▶ «مكان الكتاب» plays the video in place of the book", /youtube-nocookie\.com\/embed\/goodvideo01/.test(await page.locator("#viewer #vidPane iframe").getAttribute("src").catch(() => "")));
   ok("the video shows as a chip in the top bar", await page.locator("#views .vchip").count() === 1);

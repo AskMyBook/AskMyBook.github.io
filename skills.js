@@ -27,12 +27,28 @@
     try { const id = book(), p = typeof cur !== "undefined" ? cur.page : 1, ol = window.RAG?.outline?.(id) || [], sec = ol.filter(h => h.page <= p && (h.to || h.page) >= p);
       return ((sec.find(h => h.lv >= 2) || sec[0])?.line || "").slice(0, 70); } catch { return ""; }
   }
+  // «الدرس الأول / التاني…» و«الدرس ده» و«الكتاب ده» بيتحوّلوا لاسم الدرس الحقيقي من فهرس الكتاب
+  const ORD = { اول: 1, الاول: 1, اولي: 1, تاني: 2, ثاني: 2, التاني: 2, الثاني: 2, تالت: 3, ثالث: 3, التالت: 3, الثالث: 3, رابع: 4, الرابع: 4, خامس: 5, الخامس: 5, سادس: 6, السادس: 6, سابع: 7, السابع: 7, تامن: 8, ثامن: 8, التامن: 8, الثامن: 8, تاسع: 9, التاسع: 9, عاشر: 10, العاشر: 10 };
+  function lessons() {
+    try { const ol = (window.RAG?.outline?.(book()) || []).filter(h => h.line && h.line.trim().length > 2);
+      const ls = ol.filter(h => /(درس|الدرس|lesson)/i.test(h.line)); return ls.length ? ls : ol.filter(h => h.lv <= 2); } catch { return []; }
+  }
+  const cleanName = s => String(s || "").replace(/(المعاصر|الامتحان|سلاح التلميذ|الاضواء|الأضواء|ترم\s*\d|الترم\s*(الاول|الأول|الثاني|التاني)|\d{4})/g, " ").replace(/\s+/g, " ").trim();
   function videoTopic(q) {
-    let t = q.replace(/https?:\/\/\S+/g, " ").replace(/[؟?!.,،:«»"]+/g, " ").split(/\s+/).filter(w => w && !STOP.has(nq(w)) && !STOP.has(nq(w).replace(/^(و|ب|ل)/, ""))).join(" ").trim();
-    if (t.length < 2) t = [topicNow(), bookName()].filter(Boolean).join(" ");
-    return t;
+    const n = nq(q); let lesson = "";
+    const m = n.match(/(?:الدرس|درس|lesson)\s+(?:رقم\s+)?([^\s]+)/);
+    if (m) { const k = ORD[m[1]] || (/^\d+$/.test(m[1]) ? +m[1] : 0); if (k) lesson = (lessons()[k - 1]?.line || "").slice(0, 70); else if (/^(ده|دا|دي|الحالي|اللي)$/.test(m[1])) lesson = topicNow(); }
+    let t = q.replace(/https?:\/\/\S+/g, " ").replace(/[؟?!.,،:«»"]+/g, " ")
+      .replace(/(ال)?(كتاب|درس|فصل|وحده|وحدة|صفحه|صفحة)\s+(ده|دا|دي|ده\b)/g, " ").replace(/(ال)?درس\s+(رقم\s+)?[^\s]+/g, " ")
+      .split(/\s+/).filter(w => w && !STOP.has(nq(w)) && !STOP.has(nq(w).replace(/^(و|ب|ل)/, ""))).join(" ").trim();
+    if (lesson) t = (lesson + " " + t).trim();
+    if (t.length < 2) t = topicNow();
+    const bn = cleanName(bookName());
+    if (bn && !t.includes(bn)) t = (t + " " + bn).trim();   // اسم الكتاب (المادة والسنة) بيخلي النتايج أدق
+    return t.replace(/\s+/g, " ").slice(0, 110);
   }
   const lang = s => (s.match(/[؀-ۿ]/g) || []).length >= (s.match(/[a-z]/gi) || []).length / 2 ? "ar" : "en";
+  const ytLink = (node, href, label) => { if (!node) return; const a = document.createElement("a"); a.className = "ytlink bkbtn"; a.href = href; a.target = "_blank"; a.rel = "noopener"; a.textContent = "▶ " + label; node.insertBefore(a, node.querySelector(".acts")); };
   const say = (txt, cls = "") => { const n = add("a", txt); if (n && cls) n.classList.add(cls); window.voiceAfter?.(txt, n); return n; };
 
   // ----- 🎬 فيديوهات -----
@@ -50,11 +66,12 @@
     const topic = videoTopic(q);
     if (!topic) { say(T("قولّي عايز فيديوهات عن إيه؟ مثلًا: «هاتلي فيديوهات عن قانون نيوتن التاني».")); return; }
     const h = window.PX?.on() ? await PX.health().catch(() => null) : null, link = window.STUDY?.vYT?.(topic) || "https://www.youtube.com/results?search_query=" + encodeURIComponent(topic);
-    if (!h?.videos) { say(`${T("البحث عن الفيديوهات جوه الموقع لسه مش متفعّل على السيرفر.")}\n\n[▶ ${T("افتح نتايج")} «${topic}» ${T("على يوتيوب")}](${link})\n\n${T("اختار الفيديو اللي يعجبك، وانسخ اللينك والزقه هنا في الشات، وهيشتغل جوه الموقع.")}`); return; }
+    if (!h?.videos) { ytLink(say(`${T("البحث عن الفيديوهات جوه الموقع لسه مش متفعّل على السيرفر.")} ${T("اختار الفيديو اللي يعجبك من يوتيوب، وانسخ اللينك والزقه هنا في الشات، وهيشتغل جوه الموقع.")}`), link, T("افتح النتايج على يوتيوب")); return; }
     const wait = add("a", T("بدوّر على فيديوهات…")); wait?.classList.add("typing");
-    let list = []; try { list = await STUDY.videoSearch(topic, lang(topic)); } catch (e) { wait?.remove(); say("⚠️ " + (e.message || T("مقدرتش أجيب الفيديوهات")) + `\n\n[▶ ${T("افتح النتايج على يوتيوب")}](${link})`); return; }
+    let list = []; try { list = await STUDY.videoSearch(topic, lang(topic)); } catch (e) { wait?.remove(); const bad = /api key|key not valid|API_KEY|forbidden|403|400/i.test(e.message || "");
+      ytLink(say("⚠️ " + (bad ? T("مفتاح YouTube اللي على السيرفر مش شغّال لسه (لو لسه عامله استنى ٥ دقايق، أو اتأكد إنه اتنسخ صح في /admin).") : (e.message || T("مقدرتش أجيب الفيديوهات")))), link, T("افتح النتايج على يوتيوب")); return; }
     wait?.remove();
-    if (!list.length) { say(`${T("ملقتش فيديوهات مناسبة عن")} «${topic}». ${T("جرّب تكتب اسم الدرس بشكل تاني.")}\n\n[▶ ${T("دوّر على يوتيوب")}](${link})`); return; }
+    if (!list.length) { ytLink(say(`${T("ملقتش فيديوهات مناسبة عن")} «${topic}». ${T("جرّب تكتب اسم الدرس بشكل تاني.")}`), link, T("دوّر على يوتيوب")); return; }
     const n = say(`${T("دي أحسن فيديوهات لقيتها عن")} «${topic}» — ${T("دوس على أي فيديو يشتغل مكان الكتاب، أو «جنب الكراسة» عشان تذاكر وتكتب وإنت بتتفرج:")}`);
     if (n) cards(list, n);
   }
