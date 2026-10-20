@@ -77,6 +77,25 @@ try {
   ok("PDF tools have white and a «pick any color» button", await page.locator('#colors [data-c="#ffffff"]').count() === 1 && await page.locator("#inkPick").count() === 1);
   await page.locator("#inkPick").evaluate(el => { el.value = "#00b3a4"; el.dispatchEvent(new Event("input", { bubbles: true })); });
   ok("picking a color on the PDF side switches to the pen with that color", await page.evaluate(() => INK.pc === "#00b3a4" && INK.tool === "pen"));
+  // مؤشر القلم بدل علامة +
+  await page.click('[data-tool="pen"]');
+  const cur = await page.evaluate(() => getComputedStyle(document.getElementById("kCv")).cursor);
+  ok("pen cursor is a pen icon, not a crosshair (+)", /^url\("data:image\/svg\+xml/.test(cur), cur.slice(0, 80));
+  // حفظ PDF
+  let [dl] = await Promise.all([page.waitForEvent("download", { timeout: 20000 }).catch(() => null), page.click("#kSave").then(() => page.click('[data-save="one"]'))]);
+  let buf = dl ? await (await import("node:fs/promises")).readFile(await dl.path()) : Buffer.from("");
+  const pagesOf = async b => b.length ? page.evaluate(async b64 => { if (!window.PDFLib) await loadScript("lib/pdf-lib.min.js"); const d = await PDFLib.PDFDocument.load(Uint8Array.from(atob(b64), c => c.charCodeAt(0))); return d.getPageCount(); }, b.toString("base64")) : 0;
+  const one = await pagesOf(buf), nm1 = await page.evaluate(() => window.KURASA.lastPdf?.name);
+  ok("«الصفحة دي» downloads a real 1-page PDF named after the page", buf.slice(0, 5).toString() === "%PDF-" && one === 1 && nm1 === "ملخص الفيزيا.pdf", { nm1, one });
+  [dl] = await Promise.all([page.waitForEvent("download", { timeout: 30000 }).catch(() => null), page.click("#kSave").then(() => page.click('[data-save="all"]'))]);
+  buf = dl ? await (await import("node:fs/promises")).readFile(await dl.path()) : Buffer.from("");
+  const total = await page.evaluate(async () => ((await idbGet("nb")) || []).filter(x => !x.del).length);
+  const n2 = await pagesOf(buf);
+  ok("«كل الصفحات» downloads one PDF with every page", n2 === total && total >= 2, { n2, total });
+  ok("after exporting you're back on the same page", (await page.inputValue("#kTitle")) === "ملخص الفيزيا");
+  const dark = await page.evaluate(() => { const ed = document.getElementById("kEd"), p = document.getElementById("kPaper"), pr = p.getBoundingClientRect(), r = ed.getBoundingClientRect(), sc = pr.width / 800;
+    const c = window.KURASA._render(), g = c.getContext("2d"), d = g.getImageData(Math.round((r.left - pr.left) / sc * 2), 80, Math.round(r.width / sc * 2), 80).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 120 && d[i + 1] < 120) n++; return n; });
+  ok("typed text is drawn into the PDF page", dark > 200, dark);
   // مركز المذاكرة
   await page.click("#hubBtn"); await sleep(300); await page.click('[data-h="notebook"]'); await sleep(500);
   ok("الكراسة pages show in «📓 النوت بوك»", /ملخص الفيزيا/.test(await page.textContent(".nblist")));

@@ -90,7 +90,9 @@
         <button type="button" class="ktool" id="kPaperBtn" title="${T("لون الورقة")}" aria-label="${T("لون الورقة")}" aria-haspopup="true"><i class="kpchip"></i></button>
         <div id="kPaperMenu" class="kmenu kpmenu" hidden><b>${T("لون الورقة")}</b><div class="kpgrid">${PAPERS.map(([c, n]) => `<button type="button" class="kpsw${c === "auto" ? " kauto" : ""}" data-paper="${c}" style="--p:${c === "auto" ? "transparent" : c}" title="${T(n)}" aria-label="${T(n)}">${c === "auto" ? "A" : ""}</button>`).join("")}<label class="kpsw kpick" title="${T("اختار أي لون")}"><input type="color" id="kPaperPick" aria-label="${T("لون ورقة تاني")}"></label></div>
           <label class="kchk"><input type="checkbox" id="kPaperAll"> ${T("طبّقه على كل الصفحات")}</label></div>
-        <button type="button" class="ktool" id="kAdd" title="${T("صفحة جديدة")}" aria-label="${T("صفحة جديدة")}">＋</button><button type="button" class="ktool" id="kMore" title="${T("مسح")}" aria-label="${T("مسح")}" aria-haspopup="true">🗑️</button>
+        <button type="button" class="ktool" id="kAdd" title="${T("صفحة جديدة")}" aria-label="${T("صفحة جديدة")}">＋</button><button type="button" class="ktool" id="kSave" title="${T("احفظ الكراسة PDF")}" aria-label="${T("احفظ الكراسة PDF")}" aria-haspopup="true">⬇️</button>
+        <div id="kSaveMenu" class="kmenu" hidden><button type="button" data-save="one">📄 ${T("الصفحة دي بس (PDF)")}</button><button type="button" data-save="all">📚 ${T("كل صفحات الكراسة (PDF)")}</button></div>
+        <button type="button" class="ktool" id="kMore" title="${T("مسح")}" aria-label="${T("مسح")}" aria-haspopup="true">🗑️</button>
         <div id="kMenu" class="kmenu" hidden><button type="button" data-k="clearInk">${T("امسح رسم القلم في الصفحة دي")}</button><button type="button" data-k="clearAll">${T("فضّي الصفحة كلها")}</button><button type="button" data-k="delPage" class="kdanger">${T("امسح الصفحة نهائيًا")}</button></div>
       </div>
       <div class="kscroll" id="kScroll"><div class="kwrap" id="kWrap"><div class="kpaper" id="kPaper"><canvas id="kBg" aria-hidden="true"></canvas><div class="ked" id="kEd" dir="auto" spellcheck="false" data-ph="${T("اكتب هنا…")}"></div><canvas id="kCv"></canvas></div></div></div>`;
@@ -107,9 +109,10 @@
     $("kPrev").onclick = () => go(-1); $("kNext").onclick = () => go(1);
     $("kAdd").onclick = async () => { await K.flush(); await newPage(); open(); };
     $("kTitle").oninput = later;
-    $("kMore").onclick = e => { e.stopPropagation(); $("kPaperMenu").hidden = true; $("kMenu").hidden = !$("kMenu").hidden; };
-    $("kPaperBtn").onclick = e => { e.stopPropagation(); $("kMenu").hidden = true; $("kPaperMenu").hidden = !$("kPaperMenu").hidden; };
-    document.addEventListener("click", e => { if (!e.target.closest?.("#kMenu,#kMore,#kPaperMenu,#kPaperBtn")) { const m = $("kMenu"), pm = $("kPaperMenu"); if (m) m.hidden = true; if (pm) pm.hidden = true; } });
+    const MENUS = [["kMore", "kMenu"], ["kPaperBtn", "kPaperMenu"], ["kSave", "kSaveMenu"]];
+    for (const [b, m] of MENUS) $(b).onclick = e => { e.stopPropagation(); const was = $(m).hidden; for (const [, x] of MENUS) $(x).hidden = true; $(m).hidden = !was; };
+    document.addEventListener("click", e => { if (!e.target.closest?.(MENUS.flat().map(x => "#" + x).join(","))) for (const [, x] of MENUS) { const el = $(x); if (el) el.hidden = true; } });
+    $("kSaveMenu").onclick = e => { const b = e.target.closest("[data-save]"); if (!b) return; $("kSaveMenu").hidden = true; exportPdf(b.dataset.save === "all"); };
     $("kPick").addEventListener("input", e => { COLOR = e.target.value; ls.set("kur.color", COLOR); if (TOOL === "erase") TOOL = "pen"; if (TOOL === "type" && document.activeElement === ed) document.execCommand("foreColor", false, COLOR); tools(); });
     const setPaper = async c => { const pg = page(); if (!pg) return; ls.set("kur.paper", c);
       const targets = $("kPaperAll").checked ? PAGES : [pg]; for (const x of targets) x.paper = c === "auto" ? "" : c;
@@ -137,6 +140,7 @@
     kur.querySelectorAll("[data-color]").forEach(b => b.classList.toggle("on", b.dataset.color === COLOR));
     const pk = kur.querySelector(".kcol .kpick"), custom = !COLORS.some(([c]) => c === COLOR); pk.classList.toggle("on", custom); pk.style.setProperty("--c", custom ? COLOR : "transparent"); $("kPick").value = /^#[0-9a-f]{6}$/i.test(COLOR) ? COLOR : "#000000";
     kur.querySelectorAll("[data-size]").forEach(b => b.classList.toggle("on", +b.dataset.size === SIZE));
+    paper.style.setProperty("--kcur", cursor());
     const typing = TOOL === "type"; ed.contentEditable = typing ? "true" : "false"; paper.classList.toggle("typing", typing); paper.dataset.tool = TOOL;
     if (typing) { ed.focus(); }
   }
@@ -180,7 +184,10 @@
   // السطور والهامش مترسومين على canvas (مش CSS) عشان المسافات تفضل متساوية بالظبط مع أي تكبير
   function lines(k = Math.min(3, (devicePixelRatio || 1) * scale)) {
     const bg = $("kBg"); if (!bg) return; bg.width = cv.width; bg.height = cv.height; bg.style.width = W + "px"; bg.style.height = H + "px";
-    const g = bg.getContext("2d"), cs = getComputedStyle(paper); g.setTransform(k, 0, 0, k, 0, 0);
+    paintBg(bg.getContext("2d"), k);
+  }
+  function paintBg(g, k) {
+    const cs = getComputedStyle(paper); g.setTransform(k, 0, 0, k, 0, 0);
     g.fillStyle = cs.getPropertyValue("--kpaper").trim() || "#fffefa"; g.fillRect(0, 0, W, H);
     g.fillStyle = cs.getPropertyValue("--kline").trim() || "#c9d7ee"; const t = 1 / k * Math.max(1, Math.round(k));
     for (let y = TOP + LH; y < H - 8; y += LH) g.fillRect(0, y - t, W, t);
@@ -188,18 +195,76 @@
   }
   matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => built && lines());
   new MutationObserver(() => built && lines()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-  function path(p) {
-    ctx.beginPath(); ctx.moveTo(p[0], p[1]);
-    if (p.length === 2) { ctx.lineTo(p[0] + .1, p[1] + .1); return; }
-    for (let i = 2; i < p.length - 2; i += 2) { const mx = (p[i] + p[i + 2]) / 2, my = (p[i + 1] + p[i + 3]) / 2; ctx.quadraticCurveTo(p[i], p[i + 1], mx, my); }
-    ctx.lineTo(p[p.length - 2], p[p.length - 1]);
+  function path(p, g = ctx) {
+    g.beginPath(); g.moveTo(p[0], p[1]);
+    if (p.length === 2) { g.lineTo(p[0] + .1, p[1] + .1); return; }
+    for (let i = 2; i < p.length - 2; i += 2) { const mx = (p[i] + p[i + 2]) / 2, my = (p[i + 1] + p[i + 3]) / 2; g.quadraticCurveTo(p[i], p[i + 1], mx, my); }
+    g.lineTo(p[p.length - 2], p[p.length - 1]);
   }
-  function draw() {
-    if (!ctx) return; ctx.clearRect(0, 0, W, H); const ink = page()?.ink || [];
-    ctx.lineCap = "round"; ctx.lineJoin = "round";
-    for (const pass of ["hl", "pen"]) for (const s of ink) { if ((s.t === "hl") !== (pass === "hl")) continue;
-      ctx.globalAlpha = s.t === "hl" ? .32 : 1; ctx.strokeStyle = s.c; ctx.lineWidth = s.w; path(s.p); ctx.stroke(); }
-    ctx.globalAlpha = 1;
+  function paintInk(g, passes = ["hl", "pen"]) {
+    const ink = page()?.ink || []; g.lineCap = "round"; g.lineJoin = "round";
+    for (const pass of passes) for (const s of ink) { if ((s.t === "hl") !== (pass === "hl")) continue;
+      g.globalAlpha = s.t === "hl" ? .32 : 1; g.strokeStyle = s.c; g.lineWidth = s.w; path(s.p, g); g.stroke(); }
+    g.globalAlpha = 1;
+  }
+  function draw() { if (!ctx) return; ctx.clearRect(0, 0, W, H); paintInk(ctx); }
+
+  // ---------- مؤشر الماوس: قلم بلون القلم الحالي (بدل علامة +)، وهايلايتر، ودايرة للممحاة ----------
+  const svgCur = (svg, x, y, fb) => `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${x} ${y}, ${fb}`;
+  function cursor() {
+    if (TOOL === "erase") return svgCur(`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><circle cx="14" cy="14" r="12" fill="rgba(255,255,255,.55)" stroke="#333" stroke-width="1.5"/></svg>`, 14, 14, "cell");
+    if (TOOL === "hl") return svgCur(`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><path d="M4 24l2-6L18 6l4 4-12 12z" fill="#ffd600" stroke="#333" stroke-width="1.4" stroke-linejoin="round"/><path d="M4 24l2-6 4 4z" fill="#b38f00" stroke="#333" stroke-width="1.2" stroke-linejoin="round"/></svg>`, 4, 24, "pointer");
+    const c = /^#[0-9a-f]{6}$/i.test(COLOR) ? COLOR : "#1d2a5b";
+    return svgCur(`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><path d="M3.5 24.5l1.4-5.3L19 5.1a2.3 2.3 0 0 1 3.2 0l.7.7a2.3 2.3 0 0 1 0 3.2L8.8 23.1z" fill="${c}" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/><path d="M3.5 24.5l1.4-5.3L19 5.1a2.3 2.3 0 0 1 3.2 0l.7.7a2.3 2.3 0 0 1 0 3.2L8.8 23.1z" fill="${c}" stroke="#222" stroke-width="1.1" stroke-linejoin="round"/><path d="M3.5 24.5l1.4-5.3 3.9 3.9z" fill="#f1d3a6" stroke="#222" stroke-width="1" stroke-linejoin="round"/><path d="M3.5 24.5l.6-2.3 1.7 1.7z" fill="#222"/></svg>`, 3, 25, "crosshair");
+  }
+
+  // ---------- حفظ الكراسة PDF: كل صفحة بتترسم صورة (الورقة + الكتابة + القلم) وتتحط في ملف PDF بمقاس الورقة ----------
+  // الكتابة بتترسم كلمة كلمة في نفس مكانها على الشاشة، عشان العربي والسطور يطلعوا زي ما إنت شايفهم بالظبط.
+  function paintText(g) {
+    const pr = paper.getBoundingClientRect(), sc = pr.width / W, R = document.createRange();
+    const box = r => ({ x: (r.left - pr.left) / sc, y: (r.top - pr.top) / sc, w: r.width / sc, h: r.height / sc });
+    for (const el of ed.querySelectorAll("*")) { const bg = getComputedStyle(el).backgroundColor; if (bg && !/rgba\(0, 0, 0, 0\)|transparent/.test(bg)) { g.fillStyle = bg; for (const r of el.getClientRects()) { const b = box(r); g.fillRect(b.x, b.y, b.w, b.h); } } }
+    const tw = document.createTreeWalker(ed, NodeFilter.SHOW_TEXT);
+    for (let n = tw.nextNode(); n; n = tw.nextNode()) {
+      const cs = getComputedStyle(n.parentElement); g.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`; g.fillStyle = cs.color;
+      g.textAlign = "center"; g.textBaseline = "middle";
+      const re = /\S+/g; let m;
+      while ((m = re.exec(n.data))) {
+        R.setStart(n, m.index); R.setEnd(n, m.index + m[0].length); const rs = [...R.getClientRects()].filter(r => r.width > 0);
+        if (!rs.length) continue;
+        if (rs.length === 1) { const b = box(rs[0]); g.direction = /[\u0590-\u08FF]/.test(m[0]) ? "rtl" : "ltr"; g.fillText(m[0], b.x + b.w / 2, b.y + b.h / 2); continue; }
+        for (let i = 0; i < m[0].length; i++) { R.setStart(n, m.index + i); R.setEnd(n, m.index + i + 1); const r = R.getClientRects()[0]; if (!r) continue; const b = box(r); g.fillText(m[0][i], b.x + b.w / 2, b.y + b.h / 2); }
+      }
+    }
+  }
+  function renderPage(R = 2) {
+    const c = document.createElement("canvas"); c.width = W * R; c.height = H * R; const g = c.getContext("2d");
+    paintBg(g, R); g.setTransform(R, 0, 0, R, 0, 0); paintInk(g, ["hl"]); paintText(g); paintInk(g, ["pen"]);
+    return c;
+  }
+  const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  let exporting = false;
+  async function exportPdf(all) {
+    if (exporting) return; exporting = true; const keep = CUR, st = $("kState");
+    try {
+      await K.flush(); st.textContent = T("بنجهّز الـ PDF…");
+      if (!window.PDFLib) await loadScript("lib/pdf-lib.min.js").catch(() => loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"));
+      await document.fonts?.ready;
+      const pdf = await PDFLib.PDFDocument.create(), list = all ? PAGES.slice() : [page()];
+      for (const pg of list) {
+        if (CUR !== pg.id) { CUR = pg.id; open(); } await frame();
+        const c = renderPage(), png = await pdf.embedPng(await new Promise(r => c.toBlob(b => b.arrayBuffer().then(r), "image/png")));
+        const w = W * .75, h = H * .75, p = pdf.addPage([w, h]); p.drawImage(png, { x: 0, y: 0, width: w, height: h });
+      }
+      pdf.setTitle(all ? T("الكراسة") : (list[0]?.title || T("الكراسة"))); pdf.setCreator("AskMyBook");
+      const bytes = await pdf.save(), blob = new Blob([bytes], { type: "application/pdf" });
+      const name = (all ? T("الكراسة") + " " + new Date().toLocaleDateString("en-CA") : (list[0]?.title || T("الكراسة"))).replace(/[\\/:*?"<>|]+/g, " ").trim() + ".pdf";
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      K.lastPdf = { name, pages: list.length, size: blob.size };
+      if (CUR !== keep) { CUR = keep; open(); }
+      $("kState").textContent = "✓ " + T("اتحفظ PDF"); toast(`✅ ${T("اتحفظت الكراسة PDF")} (${list.length.toLocaleString("ar-EG")} ${T("صفحة")})`);
+    } catch (e) { if (CUR !== keep) { CUR = keep; open(); } $("kState").textContent = ""; toast("⚠️ " + T("مقدرتش أعمل الـ PDF: ") + (e?.message || e)); }
+    finally { exporting = false; }
   }
   function pointer() {
     let st = null, raf = 0;
@@ -234,6 +299,7 @@
   // لو الصفحات اتعدّلت من مركز المذاكرة أو من جهاز تاني بالمزامنة
   window.addEventListener("study-data", async e => { if (e.detail?.key !== "nb" || e.detail?.from === "kur" || !built) return; if (dirty) await save(); await load(); if (!page()) CUR = PAGES[PAGES.length - 1]?.id || ""; if (CUR) open(); });
   K.reload = async () => { if (dirty) await save(); await load(); if (!page()) CUR = PAGES[PAGES.length - 1]?.id || ""; if (built && CUR) open(); };
+  K._render = () => renderPage();
   window.KURASA = K;
   apply();
   if (mob() && MODE === "kur" && $("app").className === "show-chat") oShow("kur");

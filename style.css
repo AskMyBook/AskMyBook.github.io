@@ -669,8 +669,7 @@ body.side-kur #kur{display:flex}
 .ked h2,.ked h3,.ked p,.ked ul,.ked ol,.ked blockquote{margin:0;font-size:inherit;line-height:40px}
 .ked h2{font-weight:800}.ked ul,.ked ol{padding-inline-start:28px}
 .ked a[data-go]{color:var(--main);font-weight:600;text-decoration:none}
-.kpaper canvas{position:absolute;top:0;left:0;touch-action:none;cursor:crosshair}
-.kpaper[data-tool=erase] canvas{cursor:cell}
+#kCv{position:absolute;top:0;left:0;touch-action:none;cursor:var(--kcur,crosshair)}
 .kpaper.typing canvas{pointer-events:none}
 .kpaper.typing .ked{cursor:text}
 @media(max-width:800px){.kbar{padding:6px 8px;gap:5px}.ktool{min-width:32px}.kscroll{padding:10px 6px 30px}}
