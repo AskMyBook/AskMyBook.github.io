@@ -11,6 +11,7 @@
 //   GET  /api/tts/voices → المحركات والأصوات المتاحة (من غير أسرار)
 //   (POST /v1/tts اسم قديم لنفس الـ endpoint)
 //   POST /v1/stt?lang=ar-EG  (body = audio/webm أو ogg أو wav) → { text }
+//   POST /v1/videos  → { queries:["..."], lang?:"ar"|"en" } → { videos:[{ id, title, channel, views, likes, seconds, published, thumb, query }] } — أحسن فيديوهات يوتيوب (YOUTUBE_API_KEY)
 //
 // الحسابات (اختياري): SUPABASE_URL + SUPABASE_ANON_KEY (دول عامّين بطبيعتهم — الحماية بـ RLS في قاعدة البيانات).
 //   REQUIRE_AUTH=true → كل طلبات الـ POST لازم يكون معاها توكن مستخدم متسجّل (Authorization: Bearer …)، والحد بيتحسب لكل مستخدم.
@@ -20,7 +21,7 @@ import { ttsHandle, ttsInfo, ttsWarnings } from "./tts.js";
 import { chatChain, chatWithFallback, providerById } from "./providers.js";
 import { adminHandle, withSettings } from "./admin.js";
 
-const LIMITS = { chat: 30, embed: 90, tts: 150, stt: 30, "account/delete": 3 };   // طلبات في الدقيقة لكل IP (تقريبي، لكل نسخة من السيرفر)
+const LIMITS = { chat: 30, embed: 90, tts: 150, stt: 30, videos: 15, "account/delete": 3 };   // طلبات في الدقيقة لكل IP (تقريبي، لكل نسخة من السيرفر)
 const hits = new Map();
 const trim = (s, n = 300) => String(s ?? "").slice(0, n);
 
@@ -39,10 +40,10 @@ const fnv = s => { let h = 2166136261; for (const c of String(s)) { h ^= c.charC
 export function log(env, o) { if (env.LOG === "off" || globalThis.__TUTOR_LOG_OFF) return; try { console.log(JSON.stringify({ t: new Date().toISOString(), level: o.status >= 500 ? "error" : o.status >= 400 ? "warn" : "info", ...o })); } catch {} }
 
 // ---------- حدود الاستخدام اليومية (لكل مستخدم مسجّل، وإلا لكل IP) — عشان مستخدم واحد مايخلّصش موارد السيستم ----------
-const USAGE = new Map(), QDEF = { chat: 500, images: 100, ttsChars: 300000, sttBytes: 100e6, embedTexts: 20000 };
-const QENV = { chat: "QUOTA_CHAT_PER_DAY", images: "QUOTA_IMAGES_PER_DAY", ttsChars: "QUOTA_TTS_CHARS_PER_DAY", sttBytes: "QUOTA_STT_BYTES_PER_DAY", embedTexts: "QUOTA_EMBED_TEXTS_PER_DAY" };
+const USAGE = new Map(), QDEF = { chat: 500, images: 100, ttsChars: 300000, sttBytes: 100e6, embedTexts: 20000, videoSearches: 40 };
+const QENV = { chat: "QUOTA_CHAT_PER_DAY", images: "QUOTA_IMAGES_PER_DAY", ttsChars: "QUOTA_TTS_CHARS_PER_DAY", sttBytes: "QUOTA_STT_BYTES_PER_DAY", embedTexts: "QUOTA_EMBED_TEXTS_PER_DAY", videoSearches: "QUOTA_VIDEO_SEARCHES_PER_DAY" };
 const principal = (req, user) => user ? "u:" + user.id : "ip:" + (req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip") || "0");
-function usageOf(p) { const day = new Date().toISOString().slice(0, 10), k = day + "|" + p; let u = USAGE.get(k); if (!u) { u = { day, chat: 0, images: 0, ttsChars: 0, sttBytes: 0, embedTexts: 0, outChars: 0 }; USAGE.set(k, u); if (USAGE.size > 20000) for (const kk of USAGE.keys()) if (!kk.startsWith(day)) USAGE.delete(kk); } return u; }
+function usageOf(p) { const day = new Date().toISOString().slice(0, 10), k = day + "|" + p; let u = USAGE.get(k); if (!u) { u = { day, chat: 0, images: 0, ttsChars: 0, sttBytes: 0, embedTexts: 0, videoSearches: 0, outChars: 0 }; USAGE.set(k, u); if (USAGE.size > 20000) for (const kk of USAGE.keys()) if (!kk.startsWith(day)) USAGE.delete(kk); } return u; }
 const limits = env => Object.fromEntries(Object.keys(QDEF).map(k => [k, +env[QENV[k]] > 0 ? +env[QENV[k]] : QDEF[k]]));
 function overQuota(u, env, add) { const L = limits(env); return Object.keys(add).find(k => u[k] + add[k] > L[k]) || ""; }
 export function usageTotal() {
@@ -51,7 +52,7 @@ export function usageTotal() {
   return t;
 }
 export function usageReport(req, env, user) { const u = usageOf(principal(req, user)), L = limits(env), est = +env.COST_PER_1K_OUTPUT_CHARS > 0 ? +(u.outChars / 1000 * +env.COST_PER_1K_OUTPUT_CHARS).toFixed(4) : null;
-  return { day: u.day, by: user ? "user" : "ip", used: { chat: u.chat, images: u.images, ttsChars: u.ttsChars, sttBytes: u.sttBytes, embedTexts: u.embedTexts, outputChars: u.outChars, estTokens: Math.round(u.outChars / 4) }, limits: L, estimatedCost: est }; }
+  return { day: u.day, by: user ? "user" : "ip", used: { chat: u.chat, images: u.images, ttsChars: u.ttsChars, sttBytes: u.sttBytes, embedTexts: u.embedTexts, videoSearches: u.videoSearches, outputChars: u.outChars, estTokens: Math.round(u.outChars / 4) }, limits: L, estimatedCost: est }; }
 
 async function handle0(req, env, ctx, M) {
   const url = new URL(req.url);
@@ -83,6 +84,8 @@ async function handle0(req, env, ctx, M) {
     if (route === "chat") { const im = Array.isArray(body.images) ? Math.min(4, body.images.length) : 0, q = overQuota(U, env, { chat: 1, images: im }); if (q) return quota(q);
       const r = await chat(body, env, cors, n => { U.outChars += n; }, M); U.chat++; U.images += im; return r; }
     if (route === "embed") { const n = Array.isArray(body.texts) ? Math.min(100, body.texts.length) : 0, q = overQuota(U, env, { embedTexts: n }); if (q) return quota(q); const r = await embed(body, env, cors); U.embedTexts += n; return r; }
+    if (route === "videos") { const qs = videoQueries(body), q = overQuota(U, env, { videoSearches: qs.filter(x => !vcached(x, body.lang)).length }); if (q) return quota(q);
+      return await videos(qs, body.lang, env, cors, n => { U.videoSearches += n; }); }
     if (route === "tts") { const n = String(body.text || "").length, q = overQuota(U, env, { ttsChars: n }); if (q) return quota(q);
       const r = await ttsHandle(body, env); U.ttsChars += n; M.provider = r.headers.get("x-tts-provider") || undefined; for (const [k, v] of Object.entries(cors)) r.headers.set(k, v); r.headers.set("access-control-expose-headers", "x-tts-provider, x-tts-voice, x-tts-rate, x-tts-fallback, x-request-id"); return r; }
   } catch (e) {
@@ -139,6 +142,7 @@ function health(env) {
     embed: !!ep, embedModel: ep ? ep + ":" + embedModel(env) : "",
     tts: ttsInfo(env), ttsWarnings: ttsWarnings(env),
     stt: !!sttKey(env) && env.STT_DISABLED !== "true",
+    videos: !!env.YOUTUBE_API_KEY,
     // إعدادات الحسابات العامة (مش أسرار): الموقع بياخدها من هنا لو config.js فاضي
     auth: env.SUPABASE_URL && env.SUPABASE_ANON_KEY ? { provider: "supabase", url: env.SUPABASE_URL, anonKey: env.SUPABASE_ANON_KEY, required: env.REQUIRE_AUTH === "true" } : null };
 }
@@ -206,4 +210,47 @@ async function stt(req, env, url, cors) {
   const lang = (url.searchParams.get("lang") || "").slice(0, 2); if (/^(ar|en)$/.test(lang)) fd.append("language", lang);
   const r = await upstream(await fetch((env.STT_BASE_URL || (sttGroq(env) ? "https://api.groq.com/openai/v1" : oaBase(env))).replace(/\/+$/, "") + "/audio/transcriptions", { method: "POST", headers: { authorization: "Bearer " + key }, body: fd }), "stt");
   const j = await r.json(); return json({ text: trim(j.text, 4000) }, 200, cors);
+}
+
+// ---------- فيديوهات يوتيوب (YouTube Data API v3) ----------
+// كل بحث بياخد 100 وحدة من حصة يوتيوب اليومية المجانية (10,000)، فالنتايج بتتخزّن ٦ ساعات في ذاكرة السيرفر، وفي متصفح الطالب كمان.
+// الترتيب: مكان الفيديو في نتايج يوتيوب + عدد المشاهدات + نسبة اللايكات، ومن غير الـ Shorts (أقل من دقيقتين) ولا الفيديوهات الطويلة جدًا.
+const VCACHE = new Map(), VTTL = 6 * 3600e3, ytBase = env => (env.YOUTUBE_API_BASE || "https://www.googleapis.com/youtube/v3").replace(/\/+$/, "");
+const vkey = (q, lang) => (lang === "en" ? "en" : "ar") + "|" + q.toLowerCase();
+const vcached = (q, lang) => { const c = VCACHE.get(vkey(q, lang)); return !!c && Date.now() - c.t < VTTL; };
+export function videoQueries(b) {
+  const list = Array.isArray(b?.queries) ? b.queries : [b?.q];
+  return [...new Set(list.map(q => trim(q, 120).replace(/\s+/g, " ").trim()).filter(q => q.length >= 2))].slice(0, 3);
+}
+export const isoSeconds = d => { const m = /^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(d || "") || []; return (+m[1] || 0) * 86400 + (+m[2] || 0) * 3600 + (+m[3] || 0) * 60 + (+m[4] || 0); };
+export function rankVideos(items) {
+  return items.map((v, i) => { const views = v.views || 0, likes = v.likes || 0;
+    const score = Math.log10(views + 10) * 1.2 + (views > 200 ? Math.min(1, likes / views * 25) : 0) + (1 - i / Math.max(1, items.length)) * 2.5;
+    return { ...v, score: +score.toFixed(3) }; })
+    .filter(v => v.seconds >= 120 && v.seconds <= 4 * 3600).sort((a, b) => b.score - a.score);
+}
+async function videos(qs, lang, env, cors, onSearch = () => {}) {
+  const key = env.YOUTUBE_API_KEY;
+  if (!key) return json({ error: "عرض الفيديوهات مش متفعّل على السيرفر — صاحب الموقع يحط مفتاح YouTube من /admin", code: "no_videos" }, 501, cors);
+  if (!qs.length) throw bad("مفيش كلمات بحث");
+  lang = lang === "en" ? "en" : "ar";
+  const out = [], seen = new Set();
+  for (const q of qs) {
+    const k = vkey(q, lang); let list = vcached(q, lang) ? VCACHE.get(k).list : null;
+    if (!list) {
+      const sp = new URLSearchParams({ part: "snippet", type: "video", maxResults: "15", q, key, relevanceLanguage: lang, safeSearch: "strict", videoEmbeddable: "true", ...(lang === "ar" ? { regionCode: "EG" } : {}) });
+      const sr = await (await upstream(await fetch(ytBase(env) + "/search?" + sp), "YouTube")).json(); onSearch(1);
+      const ids = (sr.items || []).map(x => x.id?.videoId).filter(Boolean);
+      let det = {};
+      if (ids.length) { const vp = new URLSearchParams({ part: "snippet,statistics,contentDetails", id: ids.join(","), key });
+        const vr = await (await upstream(await fetch(ytBase(env) + "/videos?" + vp), "YouTube")).json();
+        for (const v of vr.items || []) det[v.id] = v; }
+      list = rankVideos(ids.map(id => det[id]).filter(Boolean).map(v => ({ id: v.id, title: trim(v.snippet?.title, 200), channel: trim(v.snippet?.channelTitle, 100),
+        published: v.snippet?.publishedAt || "", thumb: v.snippet?.thumbnails?.medium?.url || `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`,
+        views: +v.statistics?.viewCount || 0, likes: +v.statistics?.likeCount || 0, seconds: isoSeconds(v.contentDetails?.duration), query: q }))).slice(0, 8);
+      VCACHE.set(k, { t: Date.now(), list }); if (VCACHE.size > 2000) VCACHE.delete(VCACHE.keys().next().value);
+    }
+    for (const v of list) if (!seen.has(v.id)) { seen.add(v.id); out.push(v); }
+  }
+  return json({ videos: out.slice(0, 16) }, 200, cors);
 }

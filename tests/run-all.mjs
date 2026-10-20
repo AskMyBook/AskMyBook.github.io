@@ -12,6 +12,7 @@ const SUITES = [
   ["browser E2E (PDF, library, voice player, errors)", "node", ["tests/browser.test.mjs"]],
   ["tutor conversation + voice interrupt", "node", ["tests/conversation.test.mjs"]],
   ["study tools (exam, weakness, notes, plan, search, annotations, export, images)", "node", ["tests/study.test.mjs"]],
+  ["YouTube videos per book (ranking, cache, player, fallback)", "node", ["tests/videos.test.mjs"]],
   ["accounts, sync, isolation, server auth", "node", ["tests/cloud.test.mjs"]],
   ["worksheet: explain-the-lesson teaches instead of solving", "node", ["tests/worksheet.test.mjs"]],
   ["security: real Postgres RLS + pgvector (supabase.sql)", "python3", ["tests/rls.test.py"]],

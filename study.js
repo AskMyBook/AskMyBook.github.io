@@ -42,7 +42,7 @@
   const WEAK_MIN = 3, isWeak = t => t.right + t.wrong >= WEAK_MIN && t.wrong >= 2 && t.right / (t.right + t.wrong) < 0.6;
 
   // ================= الواجهة: لوحة المذاكرة =================
-  const TABS = [["library", "📚 المكتبة"], ["notes", "📝 الملاحظات"], ["exam", "🧪 امتحان"], ["weak", "🎯 نقط الضعف"], ["plan", "🗓️ خطة المذاكرة"], ["search", "🔍 بحث"]];
+  const TABS = [["library", "📚 المكتبة"], ["notes", "📝 الملاحظات"], ["exam", "🧪 امتحان"], ["weak", "🎯 نقط الضعف"], ["plan", "🗓️ خطة المذاكرة"], ["videos", "🎬 فيديوهات"], ["search", "🔍 بحث"]];
   const hub = document.createElement("section"); hub.id = "hub"; hub.hidden = true; hub.setAttribute("aria-label", "مركز المذاكرة");
   hub.innerHTML = `<div class="hubhead"><nav class="hubtabs" role="tablist">${TABS.map(([k, l]) => `<button type="button" role="tab" data-h="${k}">${l}</button>`).join("")}</nav>
     <button type="button" class="icon" id="hubClose" title="قفل" aria-label="قفل">${I('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>')}</button></div><div id="hubBody"></div>`;
@@ -58,7 +58,7 @@
   hub.querySelector(".hubtabs").onclick = e => { const t = e.target.closest("[data-h]")?.dataset.h; if (t) S.open(t); };
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !hub.hidden && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) S.close(); });
   const body = () => $("hubBody");
-  function render() { ({ library: rLibrary, notes: rNotes, exam: rExam, weak: rWeak, plan: rPlan, search: rSearch })[TAB]?.(); }
+  function render() { ({ library: rLibrary, notes: rNotes, exam: rExam, weak: rWeak, plan: rPlan, videos: rVideos, search: rSearch })[TAB]?.(); }
   const goPage = (id, p) => { S.close(); openBook(id, +p || 1); };
   hub.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a) { e.preventDefault(); const [id, p] = a.dataset.go.split("|"); goPage(id, p); } });
 
@@ -78,7 +78,7 @@
         <div class="bar2" title="اتفتح ${p.seen.length} من ${tot || "?"} صفحة"><i style="width:${pc}%"></i></div>
         <small>${p.seen.length ? `قريت ${pc}% (${p.seen.length} صفحة) · آخر صفحة ${p.last}` : "لسه مفتحتوش"}${wk ? ` · <b class="wk">🎯 ${wk} نقطة ضعف</b>` : ""}</small>
         <small class="job" data-job="${esc(e.id)}">${esc(window.JOBS?.label(JOBS.get(e.id)) || "")}</small>${JOBS?.get(e.id)?.status === "failed" ? `<button type="button" class="ghost" data-b="retry">🔄 جرّب المعالجة تاني</button>` : ""}
-        <div class="bact"><button type="button" data-b="open">▶ كمّل</button><button type="button" data-b="study" class="accent">🧑‍🏫 ذاكر مع الـ AI</button>
+        <div class="bact"><button type="button" data-b="open">▶ كمّل</button><button type="button" data-b="study" class="accent">🧑‍🏫 ذاكر مع الـ AI</button><button type="button" data-b="videos" class="ghost" title="أحسن فيديوهات شرح للكتاب ده على يوتيوب">🎬 فيديوهات</button>
         <button type="button" data-b="rename" class="ghost" title="غيّر الاسم">✏️</button><button type="button" data-b="dl" class="ghost" title="نزّل الـ PDF">⬇️</button><button type="button" data-b="del" class="ghost" title="امسح">🗑️</button></div></div></article>`; }));
     body().innerHTML = `<div class="hrow"><h2>مكتبتي (${LIB.length})</h2><button type="button" id="hAdd">➕ ضيف كتاب</button></div><div class="bgrid">${cards.join("")}</div>`;
     $("hAdd").onclick = () => $("files").click();
@@ -87,6 +87,7 @@
       const b = e.target.closest("[data-b]"); if (!b) return; const id = b.closest(".bcard").dataset.id, E = LIB.find(x => x.id === id);
       if (b.dataset.b === "open") { const p = await prog(id); goPage(id, p.last || 1); }
       else if (b.dataset.b === "study") S.studyWith(id);
+      else if (b.dataset.b === "videos") { S._vb = id; VT = -1; S.open("videos"); }
       else if (b.dataset.b === "retry") { JOBS.retry(id); rLibrary(); }
       else if (b.dataset.b === "rename") { const v = prompt("اسم الكتاب الجديد:", E.name); if (v && v.trim()) { E.name = v.trim().slice(0, 120); syncNames(); await libSave(); renderLib(); emit("lib"); rLibrary(); } }
       else if (b.dataset.b === "dl") { const f = await idbGet(id); if (!f) return toast("الملف مش موجود على الجهاز ده."); const a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = E.name + ".pdf"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 30000); }
@@ -357,6 +358,56 @@
         res.push({ id, page: i + 1, hits: c, sec: RAG.sectionAt(id, i + 1)?.line || "", snip: n.slice(Math.max(0, k - 70), k + nq.length + 90) }); }); }
     return res.sort((a, b) => (b.hits || 0) - (a.hits || 0)).slice(0, 200);
   };
+  // ================= فيديوهات يوتيوب للكتاب =================
+  // كلمات البحث من اسم الكتاب وفهرسه (الفصول والدروس). السيرفر بيدوّر في يوتيوب ويرتّب بالمشاهدات واللايكات (server/worker.js ← /v1/videos)
+  // والنتايج بتتحفظ في المتصفح ٣ أيام. لو السيرفر مفيهوش مفتاح YouTube، بنعرض روابط بحث على يوتيوب بدل الفيديوهات.
+  let VT = -1, VQ = "", VP = "";
+  const VTTL = 3 * 864e5;
+  const vClean = n => String(n || "").replace(/\.pdf$/i, "").replace(/[_\-–—]+/g, " ").replace(/\(\d+\)/g, "").replace(/\s+/g, " ").trim();
+  const vLang = t => (t.match(/[؀-ۿ]/g) || []).length >= (t.match(/[a-z]/gi) || []).length / 2 ? "ar" : "en";
+  const vTopics = id => RAG.outline(id).filter(h => h.lv <= 2 && h.line && h.line.trim().length > 2).map(h => vClean(h.line).slice(0, 70)).filter((x, i, a) => a.indexOf(x) === i).slice(0, 14);
+  function vQuery(id) {
+    const book = vClean(nm(id)), t = VT >= 0 ? vTopics(id)[VT] : "", custom = VQ.trim(), lang = vLang(custom || t || book);
+    if (custom) return { q: custom, lang };
+    const word = lang === "ar" ? "شرح" : "explained";
+    return { q: t ? `${word} ${t} ${book}`.slice(0, 110) : `${word} ${book}`.slice(0, 110), lang };
+  }
+  const vYT = q => "https://www.youtube.com/results?search_query=" + encodeURIComponent(q);
+  const vDur = s => { const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = String(s % 60).padStart(2, "0"); return h ? `${h}:${String(m).padStart(2, "0")}:${x}` : `${m}:${x}`; };
+  const vNum = n => new Intl.NumberFormat("ar-EG", { notation: "compact", maximumFractionDigits: 1 }).format(n);
+  async function vFetch(q, lang) {
+    const k = "yt:" + lang + "|" + q.toLowerCase(), c = await idbGet(k);
+    if (c && Date.now() - c.t < VTTL) return c.list;
+    const j = await PX.post("/v1/videos", { queries: [q], lang }, { ms: 30000 });
+    const list = Array.isArray(j?.videos) ? j.videos.filter(v => /^[\w-]{11}$/.test(v.id)) : [];
+    await idbSet(k, { t: Date.now(), list }); return list;
+  }
+  async function rVideos() {
+    if (!LIB.length) { body().innerHTML = `<div class="hempty"><p>ضيف كتاب الأول، وأنا أجيبلك أحسن فيديوهات شرح ليه.</p><button type="button" id="hAdd">➕ ضيف كتاب (PDF)</button></div>`; $("hAdd").onclick = () => $("files").click(); return; }
+    const id = S._vb && LIB.some(e => e.id === S._vb) ? S._vb : curBook(), tops = vTopics(id), { q, lang } = vQuery(id);
+    body().innerHTML = `<div class="hrow"><h2>🎬 فيديوهات شرح</h2><select id="vBook">${bookSel(id)}</select></div>
+      <div class="chips pick" id="vTops"><button type="button" class="chip${VT < 0 && !VQ ? " on" : ""}" data-vt="-1">📘 الكتاب كله</button>${tops.map((t, i) => `<button type="button" class="chip${VT === i && !VQ ? " on" : ""}" data-vt="${i}">${esc(t)}</button>`).join("")}</div>
+      <form id="vForm" class="row nfil"><input id="vQ" type="search" placeholder="أو اكتب الدرس اللي عايزه…" value="${esc(VQ)}"><button type="submit">دوّر</button></form>
+      <p class="vnow" id="vInfo">بدوّر على: «${esc(q)}»</p><div id="vPlayer"></div><div id="vRes"><div class="spin"></div></div>`;
+    $("vBook").onchange = e => { S._vb = e.target.value; VT = -1; VQ = ""; VP = ""; rVideos(); };
+    $("vTops").onclick = e => { const c = e.target.closest("[data-vt]"); if (!c) return; VT = +c.dataset.vt; VQ = ""; VP = ""; rVideos(); };
+    $("vForm").onsubmit = e => { e.preventDefault(); VQ = $("vQ").value.trim(); VP = ""; rVideos(); };
+    const res = $("vRes"), link = `<a class="ytlink" href="${esc(vYT(q))}" target="_blank" rel="noopener">▶ افتح نتايج البحث على يوتيوب</a>`;
+    const h = window.PX?.on() ? await PX.health() : null;
+    if (!h?.videos) { res.innerHTML = `<div class="hempty"><p>عرض الفيديوهات جوه الموقع لسه مش متفعّل، بس تقدر تشوف أحسن النتايج على يوتيوب مباشرة.</p>${link}</div>`; return; }
+    let list;
+    try { list = await vFetch(q, lang); }
+    catch (e) { if (!res.isConnected) return; res.innerHTML = `<div class="hempty"><p>⚠️ ${esc(e.message || "مقدرتش أجيب الفيديوهات")}</p>${link}</div>`; return; }
+    if (!res.isConnected) return;
+    if (!list.length) { res.innerHTML = `<div class="hempty"><p>ملقتش فيديوهات مناسبة للبحث ده. جرّب درس تاني أو اكتب اسم الدرس بنفسك.</p>${link}</div>`; return; }
+    res.innerHTML = `<div class="vgrid">${list.map(v => `<button type="button" class="vcard" data-v="${esc(v.id)}"><span class="vth" style="background-image:url('https://i.ytimg.com/vi/${esc(v.id)}/mqdefault.jpg')"><em>${vDur(v.seconds || 0)}</em></span>
+      <b>${esc(v.title)}</b><small>${esc(v.channel)} · ${vNum(v.views || 0)} مشاهدة</small></button>`).join("")}</div><p class="vnow">مترتّبين بالمشاهدات والتقييم ومدى قربهم من الدرس. ${link}</p>`;
+    const play = vid => { VP = vid; const v = list.find(x => x.id === vid); $("vPlayer").innerHTML = `<div class="vplay"><iframe src="https://www.youtube-nocookie.com/embed/${vid}?autoplay=1&rel=0" title="${esc(v?.title || "فيديو")}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>
+      <div class="row vpbar"><b>${esc(v?.title || "")}</b><a href="https://www.youtube.com/watch?v=${vid}" target="_blank" rel="noopener">افتح على يوتيوب</a><button type="button" class="ghost" id="vClose">✕ اقفل</button></div>`;
+      $("vClose").onclick = () => { VP = ""; $("vPlayer").innerHTML = ""; }; $("vPlayer").scrollIntoView({ behavior: "smooth", block: "start" }); };
+    res.querySelector(".vgrid").onclick = e => { const c = e.target.closest("[data-v]"); if (c) play(c.dataset.v); };
+    if (VP && list.some(v => v.id === VP)) play(VP);
+  }
   async function rSearch() {
     body().innerHTML = `<div class="hrow"><h2>🔍 بحث</h2></div><form id="sForm" class="row nfil"><input id="sQ" type="search" placeholder="كلمة أو جملة…" value="${esc(SQ)}" autofocus>
       <select id="sScope"><option value="book">الكتاب المفتوح</option><option value="all">كل كتبي</option></select><button type="submit">دوّر</button></form><div id="sRes"></div>`;

@@ -68,6 +68,7 @@ h1{font-family:var(--display);font-size:clamp(1.7rem,5vw,2.4rem);margin:0;line-h
     <div>
       <h1>جدول مذاكرة أولى ثانوي</h1>
       <p class="sub">منهج مصري · الترم الأول 2026/2027 · علّم على الحصة لما تخلّصها</p>
+      <p class="sub" id="wk"></p>
     </div>
     <div class="progress" aria-live="polite">
       <div class="bar"><i id="fill"></i></div>
@@ -87,7 +88,7 @@ h1{font-family:var(--display);font-size:clamp(1.7rem,5vw,2.4rem);margin:0;line-h
       <li>الجمعة إجازة، ارتاح فيها وارجع السبت بنشاط.</li>
       <li>ذاكر بعد ما ترتاح من المدرسة، وغيّر الميعاد على حسب الدروس.</li>
     </ul>
-    <button class="reset" id="reset" type="button">ابدأ أسبوع جديد</button>
+    <button class="reset" id="reset" type="button">صفّر الأسبوع ده</button>
   </section>
 </div>
 
@@ -110,10 +111,15 @@ const W=[
  ["الخميس",[["phil","فهم الدرس + تدريب على المنطق"]]]
 ];
 
-const key="study-g10-v3";
-let done={};
-try{done=JSON.parse(localStorage.getItem(key)||"{}")}catch(e){}
-const save=()=>{try{localStorage.setItem(key,JSON.stringify(done))}catch(e){}};
+// الأسبوع بيبدأ السبت: أول ما يدخل أسبوع جديد العلامات بتتمسح لوحدها
+const key="study-g10-v4";
+const weekStart=(d=new Date())=>{const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-((x.getDay()+1)%7));return x;};
+const wkId=d=>d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate();
+let st={week:wkId(weekStart()),done:{}};
+try{const v=JSON.parse(localStorage.getItem(key)||"null");if(v&&v.week===st.week)st=v;}catch(e){}
+let done=st.done;
+const save=()=>{try{localStorage.setItem(key,JSON.stringify({week:st.week,done}))}catch(e){}};
+save();
 
 const leg=document.getElementById("legend");
 Object.values(S).filter(s=>s.d).forEach(s=>{
@@ -141,10 +147,14 @@ function upd(){
   document.getElementById("fill").style.width=(c/all.length*100)+"%";
   document.getElementById("ptxt").textContent=`${c} من ${all.length} حصة`;
 }
-document.getElementById("reset").addEventListener("click",()=>{
-  done={};save();document.querySelectorAll(".slot input").forEach(x=>x.checked=false);upd();
-});
-upd();
+function clearWeek(){done={};save();document.querySelectorAll(".slot input").forEach(x=>x.checked=false);upd();}
+function showWeek(){const a=weekStart(),b=new Date(a);b.setDate(a.getDate()+5);const f=d=>d.toLocaleDateString("ar-EG",{day:"numeric",month:"long"});
+  document.getElementById("wk").textContent="أسبوع "+f(a)+" – "+f(b)+" · بيتجدد لوحده كل سبت";}
+function checkWeek(){const w=wkId(weekStart());if(w!==st.week){st.week=w;clearWeek();}showWeek();}
+document.getElementById("reset").addEventListener("click",clearWeek);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)checkWeek();});
+setInterval(checkWeek,60000);
+showWeek();upd();
 </script>
 </body>
 </html>

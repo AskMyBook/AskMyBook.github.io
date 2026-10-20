@@ -737,6 +737,11 @@ label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}.num{widt
  <div class="card"><h2>الموقع المسموح له يكلّم السيرفر</h2>
   <label>رابط موقعك (لو أكتر من واحد افصل بفاصلة)</label><input id="origins" class="ltr" placeholder="https://still-darkness-91d9.asserzaher210.workers.dev">
   <p class="mute" id="orignote"></p></div>
+ <div class="card"><h2>🎬 فيديوهات يوتيوب للكتب</h2>
+  <p class="mute">بيخلّي الطلبة يشوفوا أحسن فيديوهات شرح لكل كتاب ودرس جوه الموقع. المفتاح مجاني: Google Cloud ← فعّل «YouTube Data API v3» ← Credentials ← Create API key. من غيره الموقع بيعرض روابط بحث على يوتيوب بس.</p>
+  <label id="ytl">مفتاح YouTube</label><input class="ltr" type="password" autocomplete="off" data-key="YOUTUBE_API_KEY" id="ytk" placeholder="الزق المفتاح هنا">
+  <p class="mute">تجيب المفتاح منين: <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">console.cloud.google.com</a></p>
+  <label>عمليات بحث عن فيديوهات لكل طالب في اليوم</label><input id="qvid" type="number" min="0" class="ltr" placeholder="40"></div>
  <div class="card"><h2>الحد اليومي لكل طالب</h2><div class="row">
   <div class="grow"><label>رسايل شات في اليوم</label><input id="qchat" type="number" min="1" class="ltr" placeholder="500"></div>
   <div class="grow"><label>صور في اليوم</label><input id="qimg" type="number" min="0" class="ltr" placeholder="100"></div></div></div>
@@ -773,7 +778,7 @@ function load(){return api("state").then(function(s){S=s;ORDER=s.order.slice();D
   $("warn").innerHTML=w.map(function(x){return'<div class="msg bad">'+esc(x)+"</div>"}).join("");
   $("origins").value=s.vars.ALLOWED_ORIGINS||"";$("origins").placeholder=s.envVars.ALLOWED_ORIGINS||"https://still-darkness-91d9.asserzaher210.workers.dev";
   $("orignote").textContent=s.envVars.ALLOWED_ORIGINS?"متحط في إعدادات Cloudflare: "+s.envVars.ALLOWED_ORIGINS+" — اللي تكتبه هنا بيغلبه.":"لازم تحط رابط موقعك هنا، وإلا الموقع مش هيقدر يكلّم السيرفر.";
-  $("qchat").value=s.vars.QUOTA_CHAT_PER_DAY||"";$("qimg").value=s.vars.QUOTA_IMAGES_PER_DAY||"";
+  $("qchat").value=s.vars.QUOTA_CHAT_PER_DAY||"";$("qvid").value=s.vars.QUOTA_VIDEO_SEARCHES_PER_DAY||"";var y=s.youtube||{};$("ytl").textContent="مفتاح YouTube"+(y.admin?" — محفوظ هنا: "+y.admin:"")+(y.secret?" — متحط كـ Secret: "+y.secret:"");$("ytk").value="";$("ytk").placeholder=y.admin||y.secret?"سيبه فاضي عشان يفضل زي ما هو":"الزق المفتاح هنا";$("qimg").value=s.vars.QUOTA_IMAGES_PER_DAY||"";
   $("persona").value=s.persona.text;PEND={};$("pstate").textContent=s.persona.custom?"دي شخصية متعدّلة منك.":"دي الشخصية الأصلية.";
   var u=s.usage;$("usage").textContent=u?("رسايل شات: "+u.chat+" — صور: "+u.images+" — طلبة/أجهزة مختلفة: "+u.principals):"—";
   draw()})}
@@ -801,7 +806,7 @@ $("save").onclick=function(){var keys={},vars={};
  document.querySelectorAll("[data-key]").forEach(function(x){if(x.value.trim())keys[x.dataset.key]=x.value.trim()});
  document.querySelectorAll("[data-model]").forEach(function(x){vars[x.dataset.model]=x.value.trim()});
  Object.keys(PEND).forEach(function(k){if(/_API_KEY$/.test(k)){if(PEND[k].trim())keys[k]=PEND[k].trim()}else vars[k]=PEND[k].trim()});
- vars.LLM_ORDER=ORDER.join(",");vars.LLM_DISABLED=DIS.join(",");vars.ALLOWED_ORIGINS=$("origins").value.trim();vars.QUOTA_CHAT_PER_DAY=$("qchat").value.trim();vars.QUOTA_IMAGES_PER_DAY=$("qimg").value.trim();
+ vars.LLM_ORDER=ORDER.join(",");vars.LLM_DISABLED=DIS.join(",");vars.ALLOWED_ORIGINS=$("origins").value.trim();vars.QUOTA_CHAT_PER_DAY=$("qchat").value.trim();vars.QUOTA_IMAGES_PER_DAY=$("qimg").value.trim();vars.QUOTA_VIDEO_SEARCHES_PER_DAY=$("qvid").value.trim();
  var pv=$("persona").value;if(pv.trim()!==(S.persona.text||"").trim())vars.TEACHER_PERSONA=pv;
  $("save").disabled=true;api("save",{keys:keys,vars:vars}).then(function(){$("save").textContent="✅ اتحفظ";setTimeout(function(){$("save").textContent="💾 حفظ كل التغييرات"},2000);return load()}).catch(function(e){alert(e.message)}).then(function(){$("save").disabled=false})};
 $("cpw").onclick=function(){api("password",{password:$("npw").value}).then(function(j){T=j.token;sessionStorage.setItem("admtok",T);$("npw").value="";note($("cpm"),"✅ اتغيّر","ok")}).catch(function(e){note($("cpm"),e.message,"bad")})};
@@ -810,7 +815,7 @@ start();
 </script></body></html>`;
 
 // admin.js
-var KEY_NAMES = ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "NVIDIA_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"];
+var KEY_NAMES = ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "NVIDIA_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "YOUTUBE_API_KEY"];
 var VAR_NAMES = [
   "ALLOWED_ORIGINS",
   "LLM_ORDER",
@@ -823,7 +828,8 @@ var VAR_NAMES = [
   "OPENAI_MODEL",
   "TEACHER_PERSONA",
   "QUOTA_CHAT_PER_DAY",
-  "QUOTA_IMAGES_PER_DAY"
+  "QUOTA_IMAGES_PER_DAY",
+  "QUOTA_VIDEO_SEARCHES_PER_DAY"
 ];
 var MEM = globalThis.__TUTOR_MEM_KV ||= /* @__PURE__ */ new Map();
 var kv = (env) => env.CONFIG?.get ? env.CONFIG : { get: async (k) => MEM.get(k) ?? null, put: async (k, v) => {
@@ -966,6 +972,7 @@ async function adminHandle(req, rawEnv, url, { usage } = {}) {
       chain: chatChain(env),
       order: chatOrder(env),
       providers: providerStatus(env).map((p) => ({ ...p, key: p.keyName ? { admin: mask(s.keys[p.keyName]), secret: mask(rawEnv[p.keyName]) } : null })),
+      youtube: { admin: mask(s.keys.YOUTUBE_API_KEY), secret: mask(rawEnv.YOUTUBE_API_KEY) },
       vars: Object.fromEntries(VAR_NAMES.filter((k) => k !== "TEACHER_PERSONA").map((k) => [k, s.vars[k] ?? ""])),
       envVars: { ALLOWED_ORIGINS: rawEnv.ALLOWED_ORIGINS || "" },
       persona: { custom: !!s.vars.TEACHER_PERSONA, text: s.vars.TEACHER_PERSONA || (rawEnv.TEACHER_PERSONA && rawEnv.TEACHER_PERSONA !== "off" ? rawEnv.TEACHER_PERSONA : TEACHER_PERSONA) },
@@ -1012,7 +1019,7 @@ async function adminHandle(req, rawEnv, url, { usage } = {}) {
 }
 
 // worker.js
-var LIMITS = { chat: 30, embed: 90, tts: 150, stt: 30, "account/delete": 3 };
+var LIMITS = { chat: 30, embed: 90, tts: 150, stt: 30, videos: 15, "account/delete": 3 };
 var hits = /* @__PURE__ */ new Map();
 var trim = (s, n = 300) => String(s ?? "").slice(0, n);
 var worker_default = { fetch: handle };
@@ -1050,14 +1057,14 @@ function log(env, o) {
   }
 }
 var USAGE = /* @__PURE__ */ new Map();
-var QDEF = { chat: 500, images: 100, ttsChars: 3e5, sttBytes: 1e8, embedTexts: 2e4 };
-var QENV = { chat: "QUOTA_CHAT_PER_DAY", images: "QUOTA_IMAGES_PER_DAY", ttsChars: "QUOTA_TTS_CHARS_PER_DAY", sttBytes: "QUOTA_STT_BYTES_PER_DAY", embedTexts: "QUOTA_EMBED_TEXTS_PER_DAY" };
+var QDEF = { chat: 500, images: 100, ttsChars: 3e5, sttBytes: 1e8, embedTexts: 2e4, videoSearches: 40 };
+var QENV = { chat: "QUOTA_CHAT_PER_DAY", images: "QUOTA_IMAGES_PER_DAY", ttsChars: "QUOTA_TTS_CHARS_PER_DAY", sttBytes: "QUOTA_STT_BYTES_PER_DAY", embedTexts: "QUOTA_EMBED_TEXTS_PER_DAY", videoSearches: "QUOTA_VIDEO_SEARCHES_PER_DAY" };
 var principal = (req, user) => user ? "u:" + user.id : "ip:" + (req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip") || "0");
 function usageOf(p) {
   const day = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), k = day + "|" + p;
   let u = USAGE.get(k);
   if (!u) {
-    u = { day, chat: 0, images: 0, ttsChars: 0, sttBytes: 0, embedTexts: 0, outChars: 0 };
+    u = { day, chat: 0, images: 0, ttsChars: 0, sttBytes: 0, embedTexts: 0, videoSearches: 0, outChars: 0 };
     USAGE.set(k, u);
     if (USAGE.size > 2e4) {
       for (const kk of USAGE.keys()) if (!kk.startsWith(day)) USAGE.delete(kk);
@@ -1081,7 +1088,7 @@ function usageTotal() {
 }
 function usageReport(req, env, user) {
   const u = usageOf(principal(req, user)), L = limits(env), est = +env.COST_PER_1K_OUTPUT_CHARS > 0 ? +(u.outChars / 1e3 * +env.COST_PER_1K_OUTPUT_CHARS).toFixed(4) : null;
-  return { day: u.day, by: user ? "user" : "ip", used: { chat: u.chat, images: u.images, ttsChars: u.ttsChars, sttBytes: u.sttBytes, embedTexts: u.embedTexts, outputChars: u.outChars, estTokens: Math.round(u.outChars / 4) }, limits: L, estimatedCost: est };
+  return { day: u.day, by: user ? "user" : "ip", used: { chat: u.chat, images: u.images, ttsChars: u.ttsChars, sttBytes: u.sttBytes, embedTexts: u.embedTexts, videoSearches: u.videoSearches, outputChars: u.outChars, estTokens: Math.round(u.outChars / 4) }, limits: L, estimatedCost: est };
 }
 async function handle0(req, env, ctx, M) {
   const url = new URL(req.url);
@@ -1156,6 +1163,13 @@ async function handle0(req, env, ctx, M) {
       const r = await embed(body, env, cors);
       U.embedTexts += n;
       return r;
+    }
+    if (route === "videos") {
+      const qs = videoQueries(body), q = overQuota(U, env, { videoSearches: qs.filter((x) => !vcached(x, body.lang)).length });
+      if (q) return quota(q);
+      return await videos(qs, body.lang, env, cors, (n) => {
+        U.videoSearches += n;
+      });
     }
     if (route === "tts") {
       const n = String(body.text || "").length, q = overQuota(U, env, { ttsChars: n });
@@ -1248,6 +1262,7 @@ function health(env) {
     tts: ttsInfo(env),
     ttsWarnings: ttsWarnings(env),
     stt: !!sttKey(env) && env.STT_DISABLED !== "true",
+    videos: !!env.YOUTUBE_API_KEY,
     // إعدادات الحسابات العامة (مش أسرار): الموقع بياخدها من هنا لو config.js فاضي
     auth: env.SUPABASE_URL && env.SUPABASE_ANON_KEY ? { provider: "supabase", url: env.SUPABASE_URL, anonKey: env.SUPABASE_ANON_KEY, required: env.REQUIRE_AUTH === "true" } : null
   };
@@ -1336,11 +1351,79 @@ async function stt(req, env, url, cors) {
   const j = await r.json();
   return json({ text: trim(j.text, 4e3) }, 200, cors);
 }
+var VCACHE = /* @__PURE__ */ new Map();
+var VTTL = 6 * 36e5;
+var ytBase = (env) => (env.YOUTUBE_API_BASE || "https://www.googleapis.com/youtube/v3").replace(/\/+$/, "");
+var vkey = (q, lang) => (lang === "en" ? "en" : "ar") + "|" + q.toLowerCase();
+var vcached = (q, lang) => {
+  const c = VCACHE.get(vkey(q, lang));
+  return !!c && Date.now() - c.t < VTTL;
+};
+function videoQueries(b) {
+  const list2 = Array.isArray(b?.queries) ? b.queries : [b?.q];
+  return [...new Set(list2.map((q) => trim(q, 120).replace(/\s+/g, " ").trim()).filter((q) => q.length >= 2))].slice(0, 3);
+}
+var isoSeconds = (d) => {
+  const m = /^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(d || "") || [];
+  return (+m[1] || 0) * 86400 + (+m[2] || 0) * 3600 + (+m[3] || 0) * 60 + (+m[4] || 0);
+};
+function rankVideos(items) {
+  return items.map((v, i) => {
+    const views = v.views || 0, likes = v.likes || 0;
+    const score = Math.log10(views + 10) * 1.2 + (views > 200 ? Math.min(1, likes / views * 25) : 0) + (1 - i / Math.max(1, items.length)) * 2.5;
+    return { ...v, score: +score.toFixed(3) };
+  }).filter((v) => v.seconds >= 120 && v.seconds <= 4 * 3600).sort((a, b) => b.score - a.score);
+}
+async function videos(qs, lang, env, cors, onSearch = () => {
+}) {
+  const key = env.YOUTUBE_API_KEY;
+  if (!key) return json({ error: "\u0639\u0631\u0636 \u0627\u0644\u0641\u064A\u062F\u064A\u0648\u0647\u0627\u062A \u0645\u0634 \u0645\u062A\u0641\u0639\u0651\u0644 \u0639\u0644\u0649 \u0627\u0644\u0633\u064A\u0631\u0641\u0631 \u2014 \u0635\u0627\u062D\u0628 \u0627\u0644\u0645\u0648\u0642\u0639 \u064A\u062D\u0637 \u0645\u0641\u062A\u0627\u062D YouTube \u0645\u0646 /admin", code: "no_videos" }, 501, cors);
+  if (!qs.length) throw bad("\u0645\u0641\u064A\u0634 \u0643\u0644\u0645\u0627\u062A \u0628\u062D\u062B");
+  lang = lang === "en" ? "en" : "ar";
+  const out = [], seen = /* @__PURE__ */ new Set();
+  for (const q of qs) {
+    const k = vkey(q, lang);
+    let list2 = vcached(q, lang) ? VCACHE.get(k).list : null;
+    if (!list2) {
+      const sp = new URLSearchParams({ part: "snippet", type: "video", maxResults: "15", q, key, relevanceLanguage: lang, safeSearch: "strict", videoEmbeddable: "true", ...lang === "ar" ? { regionCode: "EG" } : {} });
+      const sr = await (await upstream2(await fetch(ytBase(env) + "/search?" + sp), "YouTube")).json();
+      onSearch(1);
+      const ids = (sr.items || []).map((x) => x.id?.videoId).filter(Boolean);
+      let det = {};
+      if (ids.length) {
+        const vp = new URLSearchParams({ part: "snippet,statistics,contentDetails", id: ids.join(","), key });
+        const vr = await (await upstream2(await fetch(ytBase(env) + "/videos?" + vp), "YouTube")).json();
+        for (const v of vr.items || []) det[v.id] = v;
+      }
+      list2 = rankVideos(ids.map((id) => det[id]).filter(Boolean).map((v) => ({
+        id: v.id,
+        title: trim(v.snippet?.title, 200),
+        channel: trim(v.snippet?.channelTitle, 100),
+        published: v.snippet?.publishedAt || "",
+        thumb: v.snippet?.thumbnails?.medium?.url || `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`,
+        views: +v.statistics?.viewCount || 0,
+        likes: +v.statistics?.likeCount || 0,
+        seconds: isoSeconds(v.contentDetails?.duration),
+        query: q
+      }))).slice(0, 8);
+      VCACHE.set(k, { t: Date.now(), list: list2 });
+      if (VCACHE.size > 2e3) VCACHE.delete(VCACHE.keys().next().value);
+    }
+    for (const v of list2) if (!seen.has(v.id)) {
+      seen.add(v.id);
+      out.push(v);
+    }
+  }
+  return json({ videos: out.slice(0, 16) }, 200, cors);
+}
 export {
   authUser,
   worker_default as default,
   handle,
+  isoSeconds,
   log,
+  rankVideos,
   usageReport,
-  usageTotal
+  usageTotal,
+  videoQueries
 };

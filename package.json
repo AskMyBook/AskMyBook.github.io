@@ -12,6 +12,7 @@
     "test:conversation": "node tests/conversation.test.mjs",
     "test:puter": "node tests/puter-voice.test.mjs",
     "test:study": "node tests/study.test.mjs",
+    "test:videos": "node tests/videos.test.mjs",
     "test:cloud": "node tests/cloud.test.mjs",
     "lint": "eslint .",
     "test:quality": "node tests/quality.test.mjs",

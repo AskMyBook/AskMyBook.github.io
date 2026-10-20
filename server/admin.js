@@ -6,9 +6,9 @@ import { CHAT_PROVIDERS, chatOrder, chatChain, providerStatus, testProvider, res
 import { TEACHER_PERSONA } from "./persona.js";
 import { ADMIN_HTML } from "./admin-page.js";
 
-export const KEY_NAMES = ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "NVIDIA_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"];
+export const KEY_NAMES = ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "NVIDIA_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "YOUTUBE_API_KEY"];
 export const VAR_NAMES = ["ALLOWED_ORIGINS", "LLM_ORDER", "LLM_DISABLED", "GEMINI_MODEL", "GROQ_MODEL", "OPENROUTER_MODEL", "CLOUDFLARE_MODEL", "ANTHROPIC_MODEL", "OPENAI_MODEL",
-  "TEACHER_PERSONA", "QUOTA_CHAT_PER_DAY", "QUOTA_IMAGES_PER_DAY"];
+  "TEACHER_PERSONA", "QUOTA_CHAT_PER_DAY", "QUOTA_IMAGES_PER_DAY", "QUOTA_VIDEO_SEARCHES_PER_DAY"];
 
 // ---------- التخزين: KV لو موجود، وإلا ذاكرة مؤقتة (للتجربة على Node بس) ----------
 const MEM = globalThis.__TUTOR_MEM_KV ||= new Map();
@@ -93,6 +93,7 @@ export async function adminHandle(req, rawEnv, url, { usage } = {}) {
     return J({
       persistent: !store.memory, workersAI: !!rawEnv.AI?.run, chain: chatChain(env), order: chatOrder(env),
       providers: providerStatus(env).map(p => ({ ...p, key: p.keyName ? { admin: mask(s.keys[p.keyName]), secret: mask(rawEnv[p.keyName]) } : null })),
+      youtube: { admin: mask(s.keys.YOUTUBE_API_KEY), secret: mask(rawEnv.YOUTUBE_API_KEY) },
       vars: Object.fromEntries(VAR_NAMES.filter(k => k !== "TEACHER_PERSONA").map(k => [k, s.vars[k] ?? ""])),
       envVars: { ALLOWED_ORIGINS: rawEnv.ALLOWED_ORIGINS || "" },
       persona: { custom: !!s.vars.TEACHER_PERSONA, text: s.vars.TEACHER_PERSONA || (rawEnv.TEACHER_PERSONA && rawEnv.TEACHER_PERSONA !== "off" ? rawEnv.TEACHER_PERSONA : TEACHER_PERSONA) },
