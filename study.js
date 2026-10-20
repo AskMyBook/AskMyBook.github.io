@@ -42,7 +42,7 @@
   const WEAK_MIN = 3, isWeak = t => t.right + t.wrong >= WEAK_MIN && t.wrong >= 2 && t.right / (t.right + t.wrong) < 0.6;
 
   // ================= الواجهة: لوحة المذاكرة =================
-  const TABS = [["library", "📚 المكتبة"], ["notes", "📝 الملاحظات"], ["exam", "🧪 امتحان"], ["weak", "🎯 نقط الضعف"], ["plan", "🗓️ خطة المذاكرة"], ["videos", "🎬 فيديوهات"], ["search", "🔍 بحث"]];
+  const TABS = [["library", "📚 المكتبة"], ["notes", "📝 الملاحظات"], ["notebook", "📓 النوت بوك"], ["exam", "🧪 امتحان"], ["weak", "🎯 نقط الضعف"], ["plan", "🗓️ خطة المذاكرة"], ["videos", "🎬 فيديوهات"], ["search", "🔍 بحث"]];
   const hub = document.createElement("section"); hub.id = "hub"; hub.hidden = true; hub.setAttribute("aria-label", "مركز المذاكرة");
   hub.innerHTML = `<div class="hubhead"><nav class="hubtabs" role="tablist">${TABS.map(([k, l]) => `<button type="button" role="tab" data-h="${k}">${l}</button>`).join("")}</nav>
     <button type="button" class="icon" id="hubClose" title="قفل" aria-label="قفل">${I('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>')}</button></div><div id="hubBody"></div>`;
@@ -52,13 +52,13 @@
   document.querySelector("header .hbtns")?.prepend(hb);
   let TAB = "library";
   S.open = (t = TAB) => { TAB = t; hub.style.top = (document.querySelector("header")?.offsetHeight || 60) + "px"; hub.hidden = false; $("settings").hidden = true; hub.querySelectorAll("[data-h]").forEach(b => { b.classList.toggle("on", b.dataset.h === t); b.setAttribute("aria-selected", b.dataset.h === t); }); render(); };
-  S.close = () => { hub.hidden = true; if (EX.timer && !EX.done) { /* الامتحان شغال: التايمر بيكمّل */ } };
+  S.close = () => { rNotebook.flush?.(); hub.hidden = true; if (EX.timer && !EX.done) { /* الامتحان شغال: التايمر بيكمّل */ } };
   hb.onclick = () => hub.hidden ? S.open() : S.close();
   $("hubClose").onclick = S.close;
   hub.querySelector(".hubtabs").onclick = e => { const t = e.target.closest("[data-h]")?.dataset.h; if (t) S.open(t); };
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !hub.hidden && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) S.close(); });
   const body = () => $("hubBody");
-  function render() { ({ library: rLibrary, notes: rNotes, exam: rExam, weak: rWeak, plan: rPlan, videos: rVideos, search: rSearch })[TAB]?.(); }
+  function render() { ({ library: rLibrary, notes: rNotes, notebook: rNotebook, exam: rExam, weak: rWeak, plan: rPlan, videos: rVideos, search: rSearch })[TAB]?.(); }
   const goPage = (id, p) => { S.close(); openBook(id, +p || 1); };
   hub.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a) { e.preventDefault(); const [id, p] = a.dataset.go.split("|"); goPage(id, p); } });
 
@@ -358,6 +358,68 @@
         res.push({ id, page: i + 1, hits: c, sec: RAG.sectionAt(id, i + 1)?.line || "", snip: n.slice(Math.max(0, k - 70), k + nq.length + 90) }); }); }
     return res.sort((a, b) => (b.hits || 0) - (a.hits || 0)).slice(0, 200);
   };
+  // ================= النوت بوك: صفحات تكتب فيها براحتك (عناوين، قوايم، هايلايت، روابط لصفحات الكتب) =================
+  // متخزّنة في المتصفح تحت «nb» وبتتزامن مع الحساب. الصفحة الممسوحة بتفضل علامة del عشان ماترجعش من جهاز تاني.
+  let NBC = "", NBQ = "";
+  const NB_TAGS = new Set(["B", "STRONG", "I", "EM", "U", "H2", "H3", "P", "DIV", "BR", "UL", "OL", "LI", "MARK", "SPAN", "A", "BLOCKQUOTE"]);
+  function nbClean(html) {
+    const t = document.createElement("template"); t.innerHTML = String(html || "");
+    const walk = n => { for (const c of [...n.childNodes]) {
+      if (c.nodeType === 3) continue;
+      if (c.nodeType !== 1 || !NB_TAGS.has(c.tagName)) { if (c.nodeType === 1 && !/^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED)$/.test(c.tagName)) { walk(c); c.replaceWith(...c.childNodes); } else c.remove(); continue; }
+      const keep = { go: c.getAttribute("data-go"), bg: c.style?.backgroundColor, fg: c.style?.color };
+      for (const a of [...c.attributes]) c.removeAttribute(a.name);
+      if (c.tagName === "A") { if (keep.go && /^[^|]{1,200}\|\d{1,5}$/.test(keep.go)) { c.setAttribute("href", "#"); c.setAttribute("data-go", keep.go); } else { walk(c); c.replaceWith(...c.childNodes); continue; } }
+      if (keep.bg && /^(rgb|#)[\w(), .#]*$/.test(keep.bg)) c.style.backgroundColor = keep.bg;
+      if (keep.fg && /^(rgb|#)[\w(), .#]*$/.test(keep.fg)) c.style.color = keep.fg;
+      walk(c); } };
+    walk(t.content); return t.innerHTML;
+  }
+  const nbText = h => { const d = document.createElement("div"); d.innerHTML = h || ""; return d.textContent || ""; };
+  const nbAll = async () => DB.get("nb", []);
+  async function nbSave(pg) { const all = await nbAll(), i = all.findIndex(x => x.id === pg.id); pg.updated = Date.now(); if (i >= 0) all[i] = pg; else all.unshift(pg); await DB.set("nb", all); }
+  S.nbNew = async (o = {}) => { const pg = { id: uid(), title: o.title || "صفحة جديدة", html: o.html || "", book: o.book ?? (curBook() || ""), created: Date.now(), updated: Date.now() }; await nbSave(pg); NBC = pg.id; return pg; };
+  async function rNotebook() {
+    const all = (await nbAll()).filter(x => !x.del).sort((a, b) => b.updated - a.updated), q = norm(NBQ.trim());
+    const list = all.filter(x => !q || norm(x.title + " " + nbText(x.html)).includes(q));
+    if (!all.some(x => x.id === NBC)) NBC = all[0]?.id || "";
+    const pg = all.find(x => x.id === NBC);
+    const B = (c, l, t, v = "") => `<button type="button" class="ghost" data-nb="${c}"${v ? ` data-v="${v}"` : ""} title="${t}" aria-label="${t}">${l}</button>`;
+    body().innerHTML = `<div class="hrow"><h2>📓 النوت بوك</h2><button type="button" id="nbNew">➕ صفحة جديدة</button></div>
+      <div class="nbwrap"><aside class="nbside"><input id="nbQ" type="search" placeholder="🔍 دوّر في صفحاتك" value="${esc(NBQ)}">
+        <div class="nblist">${list.map(x => `<button type="button" class="nbitem${x.id === NBC ? " on" : ""}" data-p="${esc(x.id)}"><b>${esc(x.title || "من غير عنوان")}</b><small>${x.book && nm(x.book) ? esc(nm(x.book)) + " · " : ""}${dfmt(x.updated)}</small><span>${esc(nbText(x.html).slice(0, 70))}</span></button>`).join("") || `<p class="hempty">${all.length ? "مفيش صفحات بالبحث ده." : "لسه مفيش صفحات."}</p>`}</div></aside>
+        <section class="nbmain">${pg ? `<input id="nbTitle" class="nbtitle" value="${esc(pg.title)}" placeholder="عنوان الصفحة" maxlength="120">
+          <div class="row nbmeta"><label>الكتاب <select id="nbBook"><option value="">— من غير كتاب —</option>${bookSel(pg.book)}</select></label><small id="nbState" class="vnow"></small></div>
+          <div class="nbbar" role="toolbar" aria-label="تنسيق">${B("bold", "<b>B</b>", "عريض")}${B("italic", "<i>I</i>", "مايل")}${B("underline", "<u>U</u>", "تحته خط")}${B("formatBlock", "H", "عنوان", "h2")}${B("formatBlock", "¶", "كلام عادي", "p")}${B("insertUnorderedList", "•", "قايمة")}${B("insertOrderedList", "1.", "قايمة بأرقام")}${B("hiliteColor", "🖍️", "هايلايت", "#fff3a0")}${B("foreColor", "🔴", "أحمر", "#d32f2f")}${B("removeFormat", "⌫", "شيل التنسيق")}${doc ? B("link", "📖 ص " + cur.page, "حط لينك للصفحة اللي فاتحها في الكتاب") : ""}</div>
+          <div id="nbEd" class="nbed" contenteditable="true" dir="auto" data-ph="اكتب هنا…">${nbClean(pg.html)}</div>
+          <div class="row"><button type="button" class="ghost" id="nbDel">🗑️ امسح الصفحة</button></div>`
+          : `<div class="hempty"><p>النوت بوك بتاعك فاضي. اعمل صفحة واكتب فيها ملخصاتك وقوانينك وأي حاجة عايز تفتكرها.</p><button type="button" id="nbFirst">➕ أول صفحة</button></div>`}</section></div>`;
+    $("nbNew").onclick = async () => { await S.nbNew(); NBQ = ""; await rNotebook(); $("nbTitle")?.select(); };
+    if ($("nbFirst")) $("nbFirst").onclick = $("nbNew").onclick;
+    $("nbQ").oninput = e => { NBQ = e.target.value; clearTimeout(rNotebook.t); rNotebook.t = setTimeout(() => rNotebook().then(() => { const s = $("nbQ"); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }), 250); };
+    body().querySelector(".nblist").onclick = async e => { const b = e.target.closest("[data-p]"); if (!b) return; await rNotebook.flush?.(); NBC = b.dataset.p; rNotebook(); };
+    if (!pg) { rNotebook.flush = null; return; }
+    const ed = $("nbEd"), st = $("nbState"); let t = 0;
+    const flush = async () => { if (!t) return; clearTimeout(t); t = 0; pg.html = nbClean(ed.innerHTML); pg.title = $("nbTitle").value.trim() || "من غير عنوان"; await nbSave(pg); if (st.isConnected) st.textContent = "✓ اتحفظ"; };
+    const later = () => { st.textContent = "بيتحفظ…"; clearTimeout(t); t = setTimeout(flush, 700); };
+    rNotebook.flush = flush;
+    ed.addEventListener("input", later); $("nbTitle").addEventListener("input", later);
+    $("nbTitle").addEventListener("change", () => flush().then(() => { const it = body().querySelector(`.nbitem[data-p="${CSS.escape(pg.id)}"] b`); if (it) it.textContent = pg.title; }));
+    $("nbBook").onchange = async e => { pg.book = e.target.value; await nbSave(pg); st.textContent = "✓ اتحفظ"; };
+    ed.addEventListener("paste", e => { const h = e.clipboardData?.getData("text/html"), tx = e.clipboardData?.getData("text/plain"); if (!h && !tx) return; e.preventDefault(); document.execCommand("insertHTML", false, h ? nbClean(h) : esc(tx).replace(/\n/g, "<br>")); });
+    ed.addEventListener("click", e => { const a = e.target.closest("a[data-go]"); if (a) { e.preventDefault(); e.stopPropagation(); const [bid, p] = a.dataset.go.split("|"); flush().then(() => goPage(bid, p)); } });
+    body().querySelector(".nbbar").onmousedown = e => { if (e.target.closest("[data-nb]")) e.preventDefault(); };   // الضغط على الزرار مايشيلش التحديد من الكتابة
+    body().querySelector(".nbbar").onclick = e => { const b = e.target.closest("[data-nb]"); if (!b) return; ed.focus(); const c = b.dataset.nb;
+      if (c === "link") document.execCommand("insertHTML", false, `<a href="#" data-go="${esc(cur.id)}|${cur.page}">📖 ${esc(nm(cur.id))} — ص ${cur.page}</a>&nbsp;`);
+      else if (c === "formatBlock") document.execCommand(c, false, b.dataset.v);
+      else if (c === "hiliteColor") { if (!document.execCommand("hiliteColor", false, b.dataset.v)) document.execCommand("backColor", false, b.dataset.v); }
+      else document.execCommand(c, false, b.dataset.v || null);
+      later(); };
+    $("nbDel").onclick = async () => { if (!confirm("تمسح الصفحة دي من النوت بوك؟")) return; clearTimeout(t); t = 0; const all2 = await nbAll(), o = all2.find(x => x.id === pg.id); if (o) { o.del = true; o.html = ""; o.updated = Date.now(); await DB.set("nb", all2); } NBC = ""; rNotebook(); };
+    if (!pg.html) ed.focus();
+  }
+  addEventListener("pagehide", () => { rNotebook.flush?.(); });
+
   // ================= فيديوهات يوتيوب للكتاب =================
   // كلمات البحث من اسم الكتاب وفهرسه (الفصول والدروس). السيرفر بيدوّر في يوتيوب ويرتّب بالمشاهدات واللايكات (server/worker.js ← /v1/videos)
   // والنتايج بتتحفظ في المتصفح ٣ أيام. لو السيرفر مفيهوش مفتاح YouTube، بنعرض روابط بحث على يوتيوب بدل الفيديوهات.
@@ -382,31 +444,58 @@
     const list = Array.isArray(j?.videos) ? j.videos.filter(v => /^[\w-]{11}$/.test(v.id)) : [];
     await idbSet(k, { t: Date.now(), list }); return list;
   }
+  // لينك يوتيوب بأي شكل (watch / youtu.be / shorts / embed / live) أو الـ ID نفسه → ID الفيديو
+  const ytId = u => { u = String(u || "").trim(); if (/^[\w-]{11}$/.test(u)) return u;
+    const m = /(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/|v\/))([\w-]{11})/.exec(u); return m ? m[1] : ""; };
+  // الفيديوهات المحفوظة لكل كتاب (بتتزامن مع الحساب): الممسوح بيفضل علامة del عشان مايرجعش من جهاز تاني
+  const vSavedGet = async id => (await DB.get("vids:" + id, [])).filter(v => !v.del);
+  async function vSaveToggle(id, v) {
+    const all = await DB.get("vids:" + id, []), o = all.find(x => x.id === v.id), now = Date.now();
+    if (o && !o.del) Object.assign(o, { del: true, updated: now }); else if (o) Object.assign(o, v, { del: false, updated: now }); else all.unshift({ id: v.id, title: v.title || "", channel: v.channel || "", seconds: v.seconds || 0, updated: now });
+    await DB.set("vids:" + id, all); return !(o && !o.del);
+  }
+  const vCard = (v, saved) => `<button type="button" class="vcard" data-v="${esc(v.id)}"><span class="vth" style="background-image:url('https://i.ytimg.com/vi/${esc(v.id)}/mqdefault.jpg')">${v.seconds ? `<em>${vDur(v.seconds)}</em>` : ""}${saved ? `<i class="vstar" title="محفوظ">⭐</i>` : ""}</span>
+      <b>${esc(v.title || "فيديو يوتيوب")}</b><small>${esc(v.channel || "")}${v.views ? ` · ${vNum(v.views)} مشاهدة` : ""}</small></button>`;
   async function rVideos() {
     if (!LIB.length) { body().innerHTML = `<div class="hempty"><p>ضيف كتاب الأول، وأنا أجيبلك أحسن فيديوهات شرح ليه.</p><button type="button" id="hAdd">➕ ضيف كتاب (PDF)</button></div>`; $("hAdd").onclick = () => $("files").click(); return; }
     const id = S._vb && LIB.some(e => e.id === S._vb) ? S._vb : curBook(), tops = vTopics(id), { q, lang } = vQuery(id);
     body().innerHTML = `<div class="hrow"><h2>🎬 فيديوهات شرح</h2><select id="vBook">${bookSel(id)}</select></div>
+      <form id="vLink" class="row nfil"><input id="vUrl" type="url" dir="ltr" placeholder="الزق لينك فيديو يوتيوب هنا ويشتغل جوه الموقع"><button type="submit">▶ شغّل</button></form>
+      <div id="vPlayer"></div><div id="vSaved"></div>
+      <h3>دوّر على شرح</h3>
       <div class="chips pick" id="vTops"><button type="button" class="chip${VT < 0 && !VQ ? " on" : ""}" data-vt="-1">📘 الكتاب كله</button>${tops.map((t, i) => `<button type="button" class="chip${VT === i && !VQ ? " on" : ""}" data-vt="${i}">${esc(t)}</button>`).join("")}</div>
       <form id="vForm" class="row nfil"><input id="vQ" type="search" placeholder="أو اكتب الدرس اللي عايزه…" value="${esc(VQ)}"><button type="submit">دوّر</button></form>
-      <p class="vnow" id="vInfo">بدوّر على: «${esc(q)}»</p><div id="vPlayer"></div><div id="vRes"><div class="spin"></div></div>`;
+      <p class="vnow" id="vInfo">بدوّر على: «${esc(q)}»</p><div id="vRes"><div class="spin"></div></div>`;
+    let found = [];
+    const play = async (vid, meta = {}) => {
+      VP = vid; const v = { id: vid, ...(found.find(x => x.id === vid) || (await vSavedGet(id)).find(x => x.id === vid) || {}), ...meta }, isSaved = (await vSavedGet(id)).some(x => x.id === vid);
+      $("vPlayer").innerHTML = `<div class="vplay"><iframe src="https://www.youtube-nocookie.com/embed/${vid}?autoplay=1&rel=0&playsinline=1" title="${esc(v.title || "فيديو")}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>
+        <div class="row vpbar"><b>${esc(v.title || "")}</b><button type="button" class="ghost" id="vStar">${isSaved ? "✓ محفوظ للكتاب ده" : "⭐ احفظه للكتاب ده"}</button><a href="https://www.youtube.com/watch?v=${vid}" target="_blank" rel="noopener">افتح على يوتيوب</a><button type="button" class="ghost" id="vClose">✕ اقفل</button></div>`;
+      $("vClose").onclick = () => { VP = ""; $("vPlayer").innerHTML = ""; };
+      $("vStar").onclick = async () => { const on = await vSaveToggle(id, v); $("vStar").textContent = on ? "✓ محفوظ للكتاب ده" : "⭐ احفظه للكتاب ده"; toast(on ? "⭐ اتحفظ الفيديو مع الكتاب" : "اتشال من المحفوظة"); drawSaved(); };
+      $("vPlayer").scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    async function drawSaved() {
+      const sv = await vSavedGet(id), el = $("vSaved"); if (!el) return;
+      el.innerHTML = sv.length ? `<h3>⭐ فيديوهاتي المحفوظة (${sv.length})</h3><div class="vgrid">${sv.map(v => vCard(v, true)).join("")}</div>` : "";
+    }
+    drawSaved();
+    $("vSaved").onclick = e => { const c = e.target.closest("[data-v]"); if (c) play(c.dataset.v); };
+    $("vLink").onsubmit = e => { e.preventDefault(); const vid = ytId($("vUrl").value); if (!vid) { toast("⚠️ ده مش لينك فيديو يوتيوب"); return; } $("vUrl").value = ""; play(vid); };
     $("vBook").onchange = e => { S._vb = e.target.value; VT = -1; VQ = ""; VP = ""; rVideos(); };
     $("vTops").onclick = e => { const c = e.target.closest("[data-vt]"); if (!c) return; VT = +c.dataset.vt; VQ = ""; VP = ""; rVideos(); };
-    $("vForm").onsubmit = e => { e.preventDefault(); VQ = $("vQ").value.trim(); VP = ""; rVideos(); };
+    $("vForm").onsubmit = e => { e.preventDefault(); const t = $("vQ").value.trim(), vid = ytId(t); if (vid && /youtu/.test(t)) { $("vQ").value = ""; play(vid); return; } VQ = t; VP = ""; rVideos(); };
+    if (VP) play(VP);
     const res = $("vRes"), link = `<a class="ytlink" href="${esc(vYT(q))}" target="_blank" rel="noopener">▶ افتح نتايج البحث على يوتيوب</a>`;
     const h = window.PX?.on() ? await PX.health() : null;
-    if (!h?.videos) { res.innerHTML = `<div class="hempty"><p>عرض الفيديوهات جوه الموقع لسه مش متفعّل، بس تقدر تشوف أحسن النتايج على يوتيوب مباشرة.</p>${link}</div>`; return; }
-    let list;
-    try { list = await vFetch(q, lang); }
-    catch (e) { if (!res.isConnected) return; res.innerHTML = `<div class="hempty"><p>⚠️ ${esc(e.message || "مقدرتش أجيب الفيديوهات")}</p>${link}</div>`; return; }
+    if (!h?.videos) { if (res.isConnected) res.innerHTML = `<div class="hempty"><p>افتح نتايج البحث على يوتيوب، واختار الفيديو اللي عاجبك، وانسخ اللينك والزقه فوق علشان يشتغل هنا.</p>${link}</div>`; return; }
+    try { found = await vFetch(q, lang); }
+    catch (e) { if (res.isConnected) res.innerHTML = `<div class="hempty"><p>⚠️ ${esc(e.message || "مقدرتش أجيب الفيديوهات")}</p>${link}</div>`; return; }
     if (!res.isConnected) return;
-    if (!list.length) { res.innerHTML = `<div class="hempty"><p>ملقتش فيديوهات مناسبة للبحث ده. جرّب درس تاني أو اكتب اسم الدرس بنفسك.</p>${link}</div>`; return; }
-    res.innerHTML = `<div class="vgrid">${list.map(v => `<button type="button" class="vcard" data-v="${esc(v.id)}"><span class="vth" style="background-image:url('https://i.ytimg.com/vi/${esc(v.id)}/mqdefault.jpg')"><em>${vDur(v.seconds || 0)}</em></span>
-      <b>${esc(v.title)}</b><small>${esc(v.channel)} · ${vNum(v.views || 0)} مشاهدة</small></button>`).join("")}</div><p class="vnow">مترتّبين بالمشاهدات والتقييم ومدى قربهم من الدرس. ${link}</p>`;
-    const play = vid => { VP = vid; const v = list.find(x => x.id === vid); $("vPlayer").innerHTML = `<div class="vplay"><iframe src="https://www.youtube-nocookie.com/embed/${vid}?autoplay=1&rel=0" title="${esc(v?.title || "فيديو")}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>
-      <div class="row vpbar"><b>${esc(v?.title || "")}</b><a href="https://www.youtube.com/watch?v=${vid}" target="_blank" rel="noopener">افتح على يوتيوب</a><button type="button" class="ghost" id="vClose">✕ اقفل</button></div>`;
-      $("vClose").onclick = () => { VP = ""; $("vPlayer").innerHTML = ""; }; $("vPlayer").scrollIntoView({ behavior: "smooth", block: "start" }); };
+    if (!found.length) { res.innerHTML = `<div class="hempty"><p>ملقتش فيديوهات مناسبة للبحث ده. جرّب درس تاني أو اكتب اسم الدرس بنفسك.</p>${link}</div>`; return; }
+    const sv = new Set((await vSavedGet(id)).map(v => v.id));
+    res.innerHTML = `<div class="vgrid">${found.map(v => vCard(v, sv.has(v.id))).join("")}</div><p class="vnow">مترتّبين بالمشاهدات والتقييم ومدى قربهم من الدرس. ${link}</p>`;
     res.querySelector(".vgrid").onclick = e => { const c = e.target.closest("[data-v]"); if (c) play(c.dataset.v); };
-    if (VP && list.some(v => v.id === VP)) play(VP);
   }
   async function rSearch() {
     body().innerHTML = `<div class="hrow"><h2>🔍 بحث</h2></div><form id="sForm" class="row nfil"><input id="sQ" type="search" placeholder="كلمة أو جملة…" value="${esc(SQ)}" autofocus>

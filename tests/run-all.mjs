@@ -13,6 +13,7 @@ const SUITES = [
   ["tutor conversation + voice interrupt", "node", ["tests/conversation.test.mjs"]],
   ["study tools (exam, weakness, notes, plan, search, annotations, export, images)", "node", ["tests/study.test.mjs"]],
   ["YouTube videos per book (ranking, cache, player, fallback)", "node", ["tests/videos.test.mjs"]],
+  ["notebook + play YouTube links in-site + Google sign-in", "node", ["tests/notebook.test.mjs"]],
   ["accounts, sync, isolation, server auth", "node", ["tests/cloud.test.mjs"]],
   ["worksheet: explain-the-lesson teaches instead of solving", "node", ["tests/worksheet.test.mjs"]],
   ["security: real Postgres RLS + pgvector (supabase.sql)", "python3", ["tests/rls.test.py"]],

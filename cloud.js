@@ -5,7 +5,7 @@
 // كل مستخدم بيشوف ملفاته هو بس، ومحدش يقدر يوصل لكتب حد تاني حتى لو عرف اسم الملف.
 (() => {
   const C = { sb: null, user: null, session: null, cfg: null, state: "off", last: +localStorage.getItem("cloud.last") || 0, err: "", busy: false };
-  const KEYRE = /^(lib|notes|exams|settings|deleted)$|^(ann_|prog:|weak:|plan:)/;
+  const KEYRE = /^(lib|notes|exams|settings|deleted|nb)$|^(ann_|prog:|weak:|plan:|vids:)/;
   // الإعدادات اللي بتتزامن (مش أي مفتاح API — مفاتيح المستخدم BYOK بتفضل على جهازه بس)
   const SET_KEYS = ["provider", "pmodel", "srclock", "embmode", "theme", "uiLang", "dialect", "dialectAr", "miclang", "autospeak", "lsize", "tts.settings"];
   const SDK = ["https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js", "https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"];
@@ -19,7 +19,7 @@
     const byId = (x, y, t = "updated") => { const m = new Map(); [...(y || []), ...(x || [])].forEach(e => { if (!e || e.id == null) return; const o = m.get(e.id); if (!o || (e[t] || 0) >= (o[t] || 0)) m.set(e.id, e); }); return [...m.values()]; };
     if (k === "deleted") { const o = { ...(b || {}) }; for (const [id, t] of Object.entries(a || {})) o[id] = Math.max(o[id] || 0, t); return o; }
     if (k === "lib") return byId(a, b, "added").filter(e => !(tomb[e.id] >= (e.added || 0)));   // كتاب اتمسح على جهاز تاني مايرجعش تاني بالدمج
-    if (k === "notes") return byId(a, b);
+    if (k === "notes" || k === "nb" || k.startsWith("vids:")) return byId(a, b);   // النوت بوك والفيديوهات المحفوظة: الممسوح بيفضل علامة (del) عشان مايرجعش
     if (k === "exams") return byId(a, b, "date").sort((x, y) => x.date - y.date).slice(-50);
     if (k.startsWith("ann_")) { const o = { ...(b || {}) }; for (const [p, items] of Object.entries(a || {})) { const seen = new Set((o[p] || []).map(x => JSON.stringify(x))); o[p] = [...(o[p] || []), ...items.filter(x => !seen.has(JSON.stringify(x)))]; } return o; }
     if (k.startsWith("prog:")) return { ...b, ...a, seen: [...new Set([...(a?.seen || []), ...(b?.seen || [])])].sort((x, y) => x - y), last: (a?.t || 0) >= (b?.t || 0) ? a?.last : b?.last, t: Math.max(a?.t || 0, b?.t || 0) };
@@ -168,6 +168,8 @@
 
   // ----- الدخول -----
   C.signUp = async (email, password) => { const { data, error } = await C.sb.auth.signUp({ email, password }); if (error) throw error; return data; };
+  // دخول بجوجل (Supabase ← Authentication ← Providers ← Google): بيروح لصفحة جوجل ويرجع للموقع وهو داخل
+  C.signInGoogle = async () => { const { error } = await C.sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname, queryParams: { prompt: "select_account" } } }); if (error) throw error; };
   C.signIn = async (email, password) => { const { data, error } = await C.sb.auth.signInWithPassword({ email, password }); if (error) throw error; return data; };
   C.signOut = async () => { clearTimeout(pushT); try { if (C.user && dirty.size) await push(); } catch {} const { error } = await C.sb.auth.signOut(); if (error) throw error; };
   C.token = () => C.session?.access_token || "";
@@ -210,17 +212,20 @@
     sec.hidden = !C.cfg && !window.DEV;   // «الحسابات مش متفعّلة… لصاحب الموقع: خطوات التفعيل» كلام لصاحب الموقع مش للطلبة
     if (!C.cfg) { sec.innerHTML = H + `<small>${T("الحسابات مش متفعّلة على الموقع ده، فكل حاجة محفوظة على الجهاز ده بس (ومحدش غيرك يقدر يوصلها). لصاحب الموقع: خطوات التفعيل في README ← «الحسابات».")}</small>`; return; }
     if (!C.user) {
-      sec.innerHTML = H + `<form id="acForm" class="acform"><input id="acEmail" type="email" autocomplete="email" placeholder="${T("الإيميل")}" dir="ltr" required><input id="acPass" type="password" autocomplete="current-password" placeholder="${T("كلمة السر (٦ حروف أو أكتر)")}" dir="ltr" minlength="6" required>
+      sec.innerHTML = H + `<button type="button" id="acGoogle" class="gbtn"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.9 6.2C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.3 5.7c4.3-4 7-9.9 7-17z"/><path fill="#FBBC05" d="M10.5 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.2C1 16.5 0 20.1 0 24s1 7.5 2.6 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.3-5.7c-2 1.4-4.7 2.3-8.6 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.2C6.6 42.6 14.6 48 24 48z"/></svg>${T("ادخل بحساب جوجل")}</button>
+        <div class="orline"><span>${T("أو بالإيميل")}</span></div><form id="acForm" class="acform"><input id="acEmail" type="email" autocomplete="email" placeholder="${T("الإيميل")}" dir="ltr" required><input id="acPass" type="password" autocomplete="current-password" placeholder="${T("كلمة السر (٦ حروف أو أكتر)")}" dir="ltr" minlength="6" required>
         <div class="row"><button type="submit" data-m="in">${T("دخول")}</button><button type="button" id="acUp" class="ghost">${T("حساب جديد")}</button><button type="button" id="acForgot" class="ghost">${T("نسيت كلمة السر")}</button></div></form><div id="acMsg" class="vnow">${esc(msg || C.err)}</div>
         <small>${T("لما تدخل، كتبك والكتابة عليها وملاحظاتك وتقدّمك بيتزامنوا على كل أجهزتك. كل حساب بيشوف بياناته هو بس.")}</small>`;
       const run = async up => { const e = $("acEmail").value.trim(), p = $("acPass").value; if (!e || p.length < 6) { $("acMsg").textContent = T("اكتب إيميل وكلمة سر ٦ حروف أو أكتر."); return; }
         $("acMsg").textContent = T("لحظة…"); try { const d = up ? await C.signUp(e, p) : await C.signIn(e, p); if (up && !d?.session) $("acMsg").textContent = T("✅ اتعمل الحساب — افتح الإيميل وأكّد، وبعدين ادخل."); }
         catch (err) { $("acMsg").textContent = "⚠️ " + (/invalid login/i.test(err.message) ? T("الإيميل أو كلمة السر غلط.") : /already registered/i.test(err.message) ? T("الإيميل ده عنده حساب — دوس «دخول».") : err.message); } };
+      $("acGoogle").onclick = async () => { $("acMsg").textContent = T("لحظة… بنفتح صفحة جوجل"); try { await C.signInGoogle(); }
+        catch (err) { $("acMsg").textContent = "⚠️ " + (/provider is not enabled|unsupported provider/i.test(err.message) ? T("الدخول بجوجل لسه مش متفعّل على الموقع (لصاحب الموقع: Supabase ← Authentication ← Providers ← Google).") : err.message); } };
       $("acForm").onsubmit = e => { e.preventDefault(); run(false); }; $("acUp").onclick = () => run(true);
       $("acForgot").onclick = async () => { const e = $("acEmail").value.trim(); if (!e) { $("acMsg").textContent = T("اكتب إيميلك الأول."); return; } try { await C.resetPassword(e); $("acMsg").textContent = T("✅ بعتنالك لينك تغيير كلمة السر على الإيميل."); } catch (err) { $("acMsg").textContent = "⚠️ " + err.message; } };
       return;
     }
-    sec.innerHTML = H + `<div class="vnow">✅ ${T("داخل باسم")} <b dir="ltr">${esc(C.user.email || "")}</b><br>${C.state === "sync" ? "🔄 " + T("بنزامن…") + " " + esc(msg) : C.state === "error" ? "⚠️ " + T("المزامنة وقفت: ") + esc(C.err) : C.last ? T("آخر مزامنة: ") + new Date(C.last).toLocaleString(window.I18N?.lang === "en" ? "en" : "ar-EG") : ""}</div>
+    sec.innerHTML = H + `<div class="vnow">✅ ${T("داخل باسم")} ${C.user.user_metadata?.avatar_url ? `<img class="acav" src="${esc(C.user.user_metadata.avatar_url)}" alt="" referrerpolicy="no-referrer">` : ""}<b>${esc(C.user.user_metadata?.full_name || C.user.user_metadata?.name || "")}</b> <b dir="ltr">${esc(C.user.email || "")}</b><br>${C.state === "sync" ? "🔄 " + T("بنزامن…") + " " + esc(msg) : C.state === "error" ? "⚠️ " + T("المزامنة وقفت: ") + esc(C.err) : C.last ? T("آخر مزامنة: ") + new Date(C.last).toLocaleString(window.I18N?.lang === "en" ? "en" : "ar-EG") : ""}</div>
       <div class="row"><button type="button" id="acSync">🔄 ${T("زامن دلوقتي")}</button><button type="button" id="acOut" class="ghost">${T("خروج")}</button></div>
       <details class="danger"><summary>${T("مسح البيانات")}</summary><div class="row"><button type="button" id="acWipe" class="ghost">${T("امسح بياناتي من السحابة")}</button>
         <button type="button" id="acDel" class="ghost">${T("امسح حسابي نهائيًا")}</button></div><small>${T("المسح من السحابة مش بيمسح الكتب اللي على الجهاز ده.")}</small></details>`;
