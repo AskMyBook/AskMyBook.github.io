@@ -564,6 +564,15 @@ async function errText(r) {
 function fail(status, msg, retryAfter) {
   return Object.assign(new Error(msg), { status, retryAfter });
 }
+var NOTHINK = /* @__PURE__ */ new Set();
+function thinkingFor(model, env = {}) {
+  if (env.GEMINI_THINKING === "default" || NOTHINK.has(model)) return null;
+  const m = String(model || "").toLowerCase();
+  if (/gemini-2\.5-pro/.test(m)) return { thinkingBudget: 128 };
+  if (/gemini-2\.5|flash-lite|flash-latest/.test(m)) return { thinkingBudget: 0 };
+  if (/gemini-[3-9]/.test(m)) return { thinkingLevel: /pro/.test(m) ? "low" : "minimal" };
+  return null;
+}
 async function callOne(p, env, { system, msgs, imgs, max, temp, signal }) {
   const last = msgs.length - 1, model = p.model(env);
   let r, pick;
@@ -580,13 +589,26 @@ async function callOne(p, env, { system, msgs, imgs, max, temp, signal }) {
       return j.type === "content_block_delta" ? j.delta?.text || "" : "";
     };
   } else if (p.kind === "gemini") {
+    const think = thinkingFor(model, env), gen = { maxOutputTokens: Math.round(max * 2.5), ...temp != null ? { temperature: temp } : {} };
     const contents = msgs.map((x, i) => ({ role: x.role === "assistant" ? "model" : "user", parts: i === last && imgs.length ? [...imgs.map((d) => ({ inline_data: { mime_type: "image/jpeg", data: d } })), { text: x.content }] : [{ text: x.content }] }));
     r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`, {
       method: "POST",
       signal,
       headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: { maxOutputTokens: Math.round(max * 2.5), ...temp != null ? { temperature: temp } : {} } })
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: think ? { ...gen, thinkingConfig: think } : gen })
     });
+    if (think && r.status === 400) {
+      const t = await r.clone().text().catch(() => "");
+      if (/thinking/i.test(t)) {
+        NOTHINK.add(model);
+        r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`, {
+          method: "POST",
+          signal,
+          headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+          body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: gen })
+        });
+      }
+    }
     pick = (j) => {
       if (j.error) throw new Error(j.error.message || "stream error");
       return (j.candidates?.[0]?.content?.parts || []).map((x) => x.text || "").join("");

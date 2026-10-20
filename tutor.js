@@ -487,7 +487,7 @@ ${SRC[mode]}
     let out = "";
     try {
       out = await Promise.race([llm({ system: `Turn the student's request into a short search query (4-10 keywords) in ${to}, the language of their textbook. Keep scientific terms and names (e.g. Newton's second law, force, mass, acceleration). Output only the keywords on one line.`,
-        messages: [{ role: "user", content: String(q).slice(0, 400) }], max: 60, noStyle: true, long: true, tier: "fast", purpose: "query" }), new Promise(r => setTimeout(() => r(""), 6000))]);
+        messages: [{ role: "user", content: String(q).slice(0, 400) }], max: 60, noStyle: true, long: true, tier: "fast", purpose: "query" }), new Promise(r => setTimeout(() => r(""), 3500))]);
     } catch (e) { if (e?.name === "AbortError") throw e; }
     out = String(out || "").split("\n").find(x => x.trim()) || ""; out = out.replace(/[*"«»`#]/g, "").trim().slice(0, 160);
     XQ.set(k, out); return out;
