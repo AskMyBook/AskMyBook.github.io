@@ -519,9 +519,11 @@ function providerStatus(env) {
     return {
       id,
       label: p.label,
+      kind: p.kind,
       keyName: p.keyName,
       link: p.link,
-      model: p.model(env),
+      model: explicitModel(p, env) || autoModelOf(id, env) || statOf(id).model || "",
+      auto: !explicitModel(p, env),
       defaultModel: p.defaultModel,
       vision: !!p.vision(env),
       configured: p.configured(env),
@@ -564,6 +566,82 @@ async function errText(r) {
 function fail(status, msg, retryAfter) {
   return Object.assign(new Error(msg), { status, retryAfter });
 }
+var PREFS = {
+  gemini: [/^gemini-flash-latest$/, /^gemini-\d+(\.\d+)?-flash$/, /^gemini-\d+(\.\d+)?-flash-\d{3}$/, /^gemini-\d+(\.\d+)?-flash/],
+  geminilite: [/^gemini-flash-lite-latest$/, /^gemini-\d+(\.\d+)?-flash-lite$/, /flash-lite/],
+  groq: [/gpt-oss-120b/, /llama-4-maverick/, /kimi-k2/, /qwen3-32b|qwen-?3/, /llama-3\.3-70b/, /gpt-oss-20b/, /llama/],
+  openrouter: [/^openrouter\/free$/, /deepseek.*:free$/, /qwen.*:free$/, /llama-4.*:free$/, /gemma.*:free$/, /gpt-oss.*:free$/, /:free$/],
+  nvidia: [/deepseek-v\d.*flash/, /kimi-k2/, /gemma-\d+-\d+b-it/, /glm-\d.*flash/, /mistral-large-3/, /nemotron-3-super/, /gpt-oss-120b/, /llama-3\.3-70b/, /deepseek/, /qwen\d?.*instruct/, /llama.*instruct/],
+  openai: [/^gpt-5(\.\d+)?-mini$/, /^gpt-4\.1-mini$/, /^gpt-4o-mini$/, /^gpt-5/, /^gpt-4/],
+  anthropic: [/sonnet/, /haiku/, /opus/]
+};
+var SKIP = /(embed|rerank|reward|guard|safety|moderat|whisper|tts|audio|speech|transcri|image|vision|-vl|parse|retriever|clip|ocr|realtime|search|instruct-?v0\.1|-base$|deepseek-r1|thinking|preview|exp-|-exp$|live|native-audio|computer)/i;
+var MLIST = /* @__PURE__ */ new Map();
+var AUTO2 = /* @__PURE__ */ new Map();
+var BAD = /* @__PURE__ */ new Map();
+var keyOf = (p, env) => p.id + "|" + String(env[p.keyName] || "").slice(-6);
+async function listModels(p, env) {
+  const k = keyOf(p, env), c = MLIST.get(k);
+  if (c && Date.now() - c.t < 6 * 36e5) return c.list;
+  const sig = AbortSignal.timeout(8e3);
+  let ids = [];
+  try {
+    if (p.kind === "gemini") {
+      const j = await (await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", { signal: sig, headers: { "x-goog-api-key": env.GEMINI_API_KEY } })).json();
+      ids = (j.models || []).filter((m) => (m.supportedGenerationMethods || []).includes("generateContent")).map((m) => String(m.name || "").replace(/^models\//, ""));
+    } else if (p.kind === "anthropic") {
+      const j = await (await fetch("https://api.anthropic.com/v1/models?limit=100", { signal: sig, headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" } })).json();
+      ids = (j.data || []).map((m) => m.id);
+    } else if (p.kind === "openai") {
+      const j = await (await fetch(p.base(env) + "/models", { signal: sig, headers: p.headers(env) })).json();
+      ids = (j.data || j.models || []).map((m) => m.id || m.name).filter(Boolean);
+    }
+  } catch {
+    ids = [];
+  }
+  MLIST.set(k, { t: Date.now(), list: ids });
+  return ids;
+}
+function pickModel(id, ids, bad2 = /* @__PURE__ */ new Set()) {
+  const ok = ids.filter((m) => !bad2.has(m) && !(SKIP.test(m) && !(PREFS[id] || []).some((r) => r.test(m) && /flash-lite|openrouter\/free/.test(m))));
+  const ver = (m) => {
+    const v = (m.match(/(\d+(?:\.\d+)?)/) || [])[1];
+    return v ? +v : 0;
+  };
+  for (const r of PREFS[id] || []) {
+    const hit = ok.filter((m) => r.test(m)).sort((a, b) => ver(b) - ver(a) || a.length - b.length);
+    if (hit.length) return hit[0];
+  }
+  return "";
+}
+var badSet = (p) => {
+  const m = BAD.get(p.id) || /* @__PURE__ */ new Map(), now = Date.now();
+  for (const [k, t] of m) if (t < now) m.delete(k);
+  BAD.set(p.id, m);
+  return new Set(m.keys());
+};
+var markBad = (p, model) => {
+  const m = BAD.get(p.id) || /* @__PURE__ */ new Map();
+  m.set(model, Date.now() + 24 * 36e5);
+  BAD.set(p.id, m);
+  for (const k of AUTO2.keys()) if (k.startsWith(p.id + "|")) AUTO2.delete(k);
+};
+var explicitModel = (p, env) => env[p.id.toUpperCase() + "_MODEL"] || "";
+async function modelFor2(p, env) {
+  const ex = explicitModel(p, env), bad2 = badSet(p);
+  if (ex && !bad2.has(ex)) return ex;
+  if (p.kind === "cfai") return p.defaultModel;
+  const k = keyOf(p, env), c = AUTO2.get(k);
+  if (c && !bad2.has(c.model) && Date.now() - c.t < 6 * 36e5) return c.model;
+  const pick = pickModel(p.id, await listModels(p, env), bad2) || (bad2.has(p.defaultModel) ? "" : p.defaultModel);
+  if (pick) AUTO2.set(k, { t: Date.now(), model: pick });
+  return pick || p.defaultModel;
+}
+var gone = (e) => e?.status === 404 || e?.status === 410 || e?.status === 400 && /not found|does not exist|unknown model|invalid model|decommission|deprecat|end of life|no longer available|not supported for generatecontent/i.test(e?.message || "");
+var autoModelOf = (id, env) => {
+  const p = byId[id];
+  return p ? AUTO2.get(keyOf(p, env))?.model || "" : "";
+};
 var NOTHINK = /* @__PURE__ */ new Set();
 function thinkingFor(model, env = {}) {
   if (env.GEMINI_THINKING === "default" || NOTHINK.has(model)) return null;
@@ -573,8 +651,8 @@ function thinkingFor(model, env = {}) {
   if (/gemini-[3-9]/.test(m)) return { thinkingLevel: /pro/.test(m) ? "low" : "minimal" };
   return null;
 }
-async function callOne(p, env, { system, msgs, imgs, max, temp, signal }) {
-  const last = msgs.length - 1, model = p.model(env);
+async function callOne(p, env, { system, msgs, imgs, max, temp, signal, model: mdl }) {
+  const last = msgs.length - 1, model = mdl || p.model(env);
   let r, pick;
   if (p.kind === "anthropic") {
     const m = msgs.map((x, i) => i === last && imgs.length ? { role: x.role, content: [...imgs.map((d) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: d } })), { type: "text", text: x.content }] } : x);
@@ -687,27 +765,36 @@ async function chatWithFallback(env, req) {
   const errors = [];
   for (const id of cand) {
     const p = byId[id];
-    const ac = new AbortController(), ms = firstMs(env, p), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "SlowProvider" })), ms);
-    const onAbort = () => ac.abort(req.signal.reason);
-    req.signal?.addEventListener?.("abort", onAbort, { once: true });
-    try {
-      const { body, pick } = await callOne(p, env, { ...req, signal: ac.signal }), next = sseReader(body, pick);
-      const first = await next();
-      clearTimeout(timer);
-      if (!first) throw fail(502, "\u0631\u062F \u0641\u0627\u0636\u064A");
-      const s = statOf(id);
-      s.ok++;
-      s.lastUsed = Date.now();
-      s.coolUntil = 0;
-      return { provider: id, first, next, tried: errors };
-    } catch (e0) {
-      clearTimeout(timer);
-      if (req.signal?.aborted) throw e0;
-      const slow = ac.signal.aborted && ac.signal.reason?.name === "SlowProvider", e = slow ? fail(504, `\u0645\u0627\u0631\u062F\u0634 \u062E\u0644\u0627\u0644 ${Math.round(ms / 1e3)} \u062B\u0627\u0646\u064A\u0629`) : e0;
-      if (!slow && e?.name === "AbortError") throw e;
-      const st = e?.status || 502;
-      cool(id, st === 504 ? 503 : st, e?.retryAfter, e?.message);
-      errors.push({ id, status: st, error: String(e?.message || e).slice(0, 160) });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const model = await modelFor2(p, env);
+      const ac = new AbortController(), ms = firstMs(env, p), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "SlowProvider" })), ms);
+      const onAbort = () => ac.abort(req.signal.reason);
+      req.signal?.addEventListener?.("abort", onAbort, { once: true });
+      try {
+        const { body, pick } = await callOne(p, env, { ...req, signal: ac.signal, model }), next = sseReader(body, pick);
+        const first = await next();
+        clearTimeout(timer);
+        if (!first) throw fail(502, "\u0631\u062F \u0641\u0627\u0636\u064A");
+        const s = statOf(id);
+        s.ok++;
+        s.lastUsed = Date.now();
+        s.coolUntil = 0;
+        s.model = model;
+        return { provider: id, model, first, next, tried: errors };
+      } catch (e0) {
+        clearTimeout(timer);
+        if (req.signal?.aborted) throw e0;
+        const slow = ac.signal.aborted && ac.signal.reason?.name === "SlowProvider", e = slow ? fail(504, `\u0645\u0627\u0631\u062F\u0634 \u062E\u0644\u0627\u0644 ${Math.round(ms / 1e3)} \u062B\u0627\u0646\u064A\u0629`) : e0;
+        if (!slow && e?.name === "AbortError") throw e;
+        const st = e?.status || 502;
+        errors.push({ id, model, status: st, error: String(e?.message || e).slice(0, 160) });
+        if (gone(e)) {
+          markBad(p, model);
+          continue;
+        }
+        cool(id, st === 504 ? 503 : st, e?.retryAfter, e?.message);
+        break;
+      }
     }
   }
   const all429 = errors.length && errors.every((x) => x.status === 429);
@@ -717,19 +804,29 @@ async function testProvider(env, id) {
   const p = byId[id];
   if (!p) return { ok: false, error: "\u0645\u0632\u0648\u0651\u062F \u0645\u0634 \u0645\u0639\u0631\u0648\u0641" };
   if (!p.configured(env)) return { ok: false, error: p.kind === "cfai" ? "\u0631\u0628\u0637 Workers AI (\u0628\u0627\u0633\u0645 AI) \u0645\u0634 \u0645\u0648\u062C\u0648\u062F" : "\u0645\u0641\u064A\u0634 \u0645\u0641\u062A\u0627\u062D" };
-  const t0 = Date.now();
-  try {
-    const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "\u0642\u0648\u0644: \u0623\u0647\u0644\u0627\u064B\u060C \u0623\u0646\u0627 \u0634\u063A\u0627\u0644." }], imgs: [], max: 600, temp: 0, signal: AbortSignal.timeout(25e3) });
-    const next = sseReader(body, pick);
-    let out = "", t;
-    while (out.length < 200 && (t = await next())) out += t;
-    if (!out) return { ok: false, error: "\u0631\u062F \u0641\u0627\u0636\u064A", ms: Date.now() - t0 };
-    statOf(id).coolUntil = 0;
-    return { ok: true, reply: out.slice(0, 200), model: p.model(env), ms: Date.now() - t0 };
-  } catch (e) {
-    const slow = e?.name === "TimeoutError" || /timed? ?out|aborted/i.test(String(e?.message));
-    return { ok: false, status: e?.status || (slow ? 504 : void 0), error: slow ? "\u0645\u0627\u0631\u062F\u0634 \u062E\u0644\u0627\u0644 \u0662\u0665 \u062B\u0627\u0646\u064A\u0629 \u2014 \u0627\u0644\u0645\u0648\u062F\u064A\u0644 \u0628\u0637\u064A\u0621 \u0623\u0648 \u0645\u0634 \u0645\u062A\u0627\u062D \u0644\u062D\u0633\u0627\u0628\u0643 \u062F\u0644\u0648\u0642\u062A\u064A\u060C \u062C\u0631\u0651\u0628 \u0645\u0648\u062F\u064A\u0644 \u062A\u0627\u0646\u064A" : String(e?.message || e).slice(0, 300), ms: Date.now() - t0 };
+  const t0 = Date.now(), tried = [];
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const model = await modelFor2(p, env);
+    try {
+      const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "\u0642\u0648\u0644: \u0623\u0647\u0644\u0627\u064B\u060C \u0623\u0646\u0627 \u0634\u063A\u0627\u0644." }], imgs: [], max: 600, temp: 0, signal: AbortSignal.timeout(25e3), model });
+      const next = sseReader(body, pick);
+      let out = "", t;
+      while (out.length < 200 && (t = await next())) out += t;
+      if (!out) return { ok: false, error: "\u0631\u062F \u0641\u0627\u0636\u064A", model, ms: Date.now() - t0 };
+      statOf(id).coolUntil = 0;
+      statOf(id).model = model;
+      return { ok: true, reply: out.slice(0, 200), model, auto: !explicitModel(p, env), tried, ms: Date.now() - t0 };
+    } catch (e) {
+      if (gone(e)) {
+        markBad(p, model);
+        tried.push(model);
+        continue;
+      }
+      const slow = e?.name === "TimeoutError" || /timed? ?out|aborted/i.test(String(e?.message));
+      return { ok: false, status: e?.status || (slow ? 504 : void 0), model, tried, error: slow ? `\u0645\u0627\u0631\u062F\u0634 \u062E\u0644\u0627\u0644 \u0662\u0665 \u062B\u0627\u0646\u064A\u0629 (${model}) \u2014 \u0628\u0637\u064A\u0621 \u0623\u0648 \u0645\u0634 \u0645\u062A\u0627\u062D \u0644\u062D\u0633\u0627\u0628\u0643 \u062F\u0644\u0648\u0642\u062A\u064A` : String(e?.message || e).slice(0, 300), ms: Date.now() - t0 };
+    }
   }
+  return { ok: false, tried, error: "\u0643\u0644 \u0627\u0644\u0645\u0648\u062F\u064A\u0644\u0627\u062A \u0627\u0644\u0644\u064A \u062C\u0631\u0628\u062A\u0647\u0627 \u0645\u0634 \u0645\u062A\u0627\u062D\u0629 \u0644\u062D\u0633\u0627\u0628\u0643: " + tried.join("\u060C "), ms: Date.now() - t0 };
 }
 
 // admin-page.js
@@ -821,7 +918,7 @@ function draw(){var byId={};S.providers.forEach(function(p){byId[p.id]=p});
    :'<p class="mute">'+(p.configured?"شغال من غير مفتاح عن طريق ربط Workers AI (حد مجاني يومي).":"عشان يشتغل: Settings ← Bindings ← Add ← Workers AI، والاسم AI.")+"</p>";
   return'<div class="prov'+(off?" off":"")+'"><div class="row"><span class="num">'+(i+1)+'</span><b class="grow">'+esc(p.label)+(p.vision?' <span class="pill">بيشوف صور</span>':"")+"</b>"+st+
    '<button class="ghost sm" data-up="'+i+'" '+(i?"":"disabled")+'>▲</button><button class="ghost sm" data-dn="'+i+'" '+(i<ORDER.length-1?"":"disabled")+'>▼</button><button class="ghost sm" data-tg="'+id+'">'+(off?"شغّل":"وقّف")+"</button></div>"+
-   keyBox+'<label>الموديل (سيبه فاضي = '+esc(p.defaultModel)+')</label><input class="ltr" data-model="'+id.toUpperCase()+'_MODEL" value="'+esc((S.vars[id.toUpperCase()+"_MODEL"])||"")+'" placeholder="'+esc(p.defaultModel)+'">'+
+   keyBox+'<label>الموديل — '+(p.kind==="cfai"?"سيبه فاضي = "+esc(p.defaultModel):(p.auto?"تلقائي: السيرفر بيختار أحسن موديل متاح لحسابك"+(p.model?" (دلوقتي: <b class=\"ltr\">"+esc(p.model)+"</b>)":""):"اتكتب بإيدك — امسحه عشان يرجع تلقائي"))+'</label><input class="ltr" data-model="'+id.toUpperCase()+'_MODEL" value="'+esc((S.vars[id.toUpperCase()+"_MODEL"])||"")+'" placeholder="'+(p.kind==="cfai"?esc(p.defaultModel):"تلقائي (سيبه فاضي)")+'">'+
    '<div class="row" style="margin-top:10px"><button class="ghost sm" data-test="'+id+'">🔌 اختبر</button>'+(p.resting?'<button class="ghost sm" data-rest="'+id+'">جرّبه دلوقتي</button>':"")+'<span class="mute grow">النهارده: '+p.okToday+" نجح، "+p.failToday+" فشل"+(p.lastError?" — آخر خطأ "+ago(p.lastErrorAt)+": "+esc(p.lastError):"")+'</span></div><div data-out="'+id+'"></div></div>'}).join("");
  document.querySelectorAll("[data-key],[data-model]").forEach(function(x){var k=x.dataset.key||x.dataset.model;if(k in PEND)x.value=PEND[k]})}
 $("provs").addEventListener("input",function(e){var x=e.target,k=x.dataset&&(x.dataset.key||x.dataset.model);if(k)PEND[k]=x.value});
@@ -831,7 +928,7 @@ $("provs").addEventListener("click",function(e){var b=e.target.closest("button")
  else if(d.del){if(confirm("تمسح المفتاح ده؟"))api("save",{keys:(function(o){o[d.del]="__delete__";return o})({})}).then(load)}
  else if(d.rest){api("reset-rest",{id:d.rest}).then(load)}
  else if(d.test){var out=document.querySelector('[data-out="'+d.test+'"]');out.innerHTML='<div class="msg">بيجرّب… (لو لسه حاطط مفتاح جديد، احفظ الأول)</div>';
-  api("test",{id:d.test}).then(function(r){out.innerHTML=r.ok?'<div class="msg ok">✅ شغال ('+r.ms+" ms، "+esc(r.model)+"): "+esc(r.reply)+"</div>":'<div class="msg bad">❌ '+esc(r.error)+"</div>"}).catch(function(x){note(out,x.message,"bad")})}});
+  api("test",{id:d.test}).then(function(r){out.innerHTML=r.ok?'<div class="msg ok">✅ شغال ('+r.ms+" ms، "+(r.auto?"اختار تلقائي: ":"")+esc(r.model)+"): "+esc(r.reply)+(r.tried&&r.tried.length?"<br><small>مش متاحين لحسابك واتعدّوا: "+esc(r.tried.join("، "))+"</small>":"")+"</div>":'<div class="msg bad">❌ '+esc(r.error)+"</div>"}).catch(function(x){note(out,x.message,"bad")})}});
 $("presetp").onclick=function(){if(confirm("ترجع للشخصية الأصلية؟ التعديلات بتاعتك هتتمسح.")){api("save",{vars:{TEACHER_PERSONA:""}}).then(load)}};
 $("save").onclick=function(){var keys={},vars={};
  document.querySelectorAll("[data-key]").forEach(function(x){if(x.value.trim())keys[x.dataset.key]=x.value.trim()});

@@ -87,7 +87,7 @@ function draw(){var byId={};S.providers.forEach(function(p){byId[p.id]=p});
    :'<p class="mute">'+(p.configured?"شغال من غير مفتاح عن طريق ربط Workers AI (حد مجاني يومي).":"عشان يشتغل: Settings ← Bindings ← Add ← Workers AI، والاسم AI.")+"</p>";
   return'<div class="prov'+(off?" off":"")+'"><div class="row"><span class="num">'+(i+1)+'</span><b class="grow">'+esc(p.label)+(p.vision?' <span class="pill">بيشوف صور</span>':"")+"</b>"+st+
    '<button class="ghost sm" data-up="'+i+'" '+(i?"":"disabled")+'>▲</button><button class="ghost sm" data-dn="'+i+'" '+(i<ORDER.length-1?"":"disabled")+'>▼</button><button class="ghost sm" data-tg="'+id+'">'+(off?"شغّل":"وقّف")+"</button></div>"+
-   keyBox+'<label>الموديل (سيبه فاضي = '+esc(p.defaultModel)+')</label><input class="ltr" data-model="'+id.toUpperCase()+'_MODEL" value="'+esc((S.vars[id.toUpperCase()+"_MODEL"])||"")+'" placeholder="'+esc(p.defaultModel)+'">'+
+   keyBox+'<label>الموديل — '+(p.kind==="cfai"?"سيبه فاضي = "+esc(p.defaultModel):(p.auto?"تلقائي: السيرفر بيختار أحسن موديل متاح لحسابك"+(p.model?" (دلوقتي: <b class=\"ltr\">"+esc(p.model)+"</b>)":""):"اتكتب بإيدك — امسحه عشان يرجع تلقائي"))+'</label><input class="ltr" data-model="'+id.toUpperCase()+'_MODEL" value="'+esc((S.vars[id.toUpperCase()+"_MODEL"])||"")+'" placeholder="'+(p.kind==="cfai"?esc(p.defaultModel):"تلقائي (سيبه فاضي)")+'">'+
    '<div class="row" style="margin-top:10px"><button class="ghost sm" data-test="'+id+'">🔌 اختبر</button>'+(p.resting?'<button class="ghost sm" data-rest="'+id+'">جرّبه دلوقتي</button>':"")+'<span class="mute grow">النهارده: '+p.okToday+" نجح، "+p.failToday+" فشل"+(p.lastError?" — آخر خطأ "+ago(p.lastErrorAt)+": "+esc(p.lastError):"")+'</span></div><div data-out="'+id+'"></div></div>'}).join("");
  document.querySelectorAll("[data-key],[data-model]").forEach(function(x){var k=x.dataset.key||x.dataset.model;if(k in PEND)x.value=PEND[k]})}
 $("provs").addEventListener("input",function(e){var x=e.target,k=x.dataset&&(x.dataset.key||x.dataset.model);if(k)PEND[k]=x.value});
@@ -97,7 +97,7 @@ $("provs").addEventListener("click",function(e){var b=e.target.closest("button")
  else if(d.del){if(confirm("تمسح المفتاح ده؟"))api("save",{keys:(function(o){o[d.del]="__delete__";return o})({})}).then(load)}
  else if(d.rest){api("reset-rest",{id:d.rest}).then(load)}
  else if(d.test){var out=document.querySelector('[data-out="'+d.test+'"]');out.innerHTML='<div class="msg">بيجرّب… (لو لسه حاطط مفتاح جديد، احفظ الأول)</div>';
-  api("test",{id:d.test}).then(function(r){out.innerHTML=r.ok?'<div class="msg ok">✅ شغال ('+r.ms+" ms، "+esc(r.model)+"): "+esc(r.reply)+"</div>":'<div class="msg bad">❌ '+esc(r.error)+"</div>"}).catch(function(x){note(out,x.message,"bad")})}});
+  api("test",{id:d.test}).then(function(r){out.innerHTML=r.ok?'<div class="msg ok">✅ شغال ('+r.ms+" ms، "+(r.auto?"اختار تلقائي: ":"")+esc(r.model)+"): "+esc(r.reply)+(r.tried&&r.tried.length?"<br><small>مش متاحين لحسابك واتعدّوا: "+esc(r.tried.join("، "))+"</small>":"")+"</div>":'<div class="msg bad">❌ '+esc(r.error)+"</div>"}).catch(function(x){note(out,x.message,"bad")})}});
 $("presetp").onclick=function(){if(confirm("ترجع للشخصية الأصلية؟ التعديلات بتاعتك هتتمسح.")){api("save",{vars:{TEACHER_PERSONA:""}}).then(load)}};
 $("save").onclick=function(){var keys={},vars={};
  document.querySelectorAll("[data-key]").forEach(function(x){if(x.value.trim())keys[x.dataset.key]=x.value.trim()});

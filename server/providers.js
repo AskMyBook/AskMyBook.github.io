@@ -55,7 +55,7 @@ export function statOf(id) {
 export function providerStatus(env) {
   const now = Date.now();
   return chatOrder(env).map(id => { const p = byId[id], s = statOf(id);
-    return { id, label: p.label, keyName: p.keyName, link: p.link, model: p.model(env), defaultModel: p.defaultModel, vision: !!p.vision(env),
+    return { id, label: p.label, kind: p.kind, keyName: p.keyName, link: p.link, model: explicitModel(p, env) || autoModelOf(id, env) || statOf(id).model || "", auto: !explicitModel(p, env), defaultModel: p.defaultModel, vision: !!p.vision(env),
       configured: p.configured(env), disabled: list(env.LLM_DISABLED).includes(id), okToday: s.ok, failToday: s.fail,
       resting: s.coolUntil > now ? Math.ceil((s.coolUntil - now) / 1000) : 0, lastError: s.lastError, lastErrorAt: s.lastErrorAt, lastUsed: s.lastUsed }; });
 }
@@ -77,6 +77,60 @@ async function errText(r) {
 }
 function fail(status, msg, retryAfter) { return Object.assign(new Error(msg), { status, retryAfter }); }
 
+// ---------- اختيار الموديل تلقائي: لو خانة الموديل فاضية، السيرفر بيسأل المزوّد عن الموديلات المتاحة لحسابك
+// ويختار أحسن واحد حسب الترتيب ده. ولو موديل اتشال أو مش متاح (404/410)، بيعلّمه ويختار اللي بعده لوحده.
+const PREFS = {
+  gemini: [/^gemini-flash-latest$/, /^gemini-\d+(\.\d+)?-flash$/, /^gemini-\d+(\.\d+)?-flash-\d{3}$/, /^gemini-\d+(\.\d+)?-flash/],
+  geminilite: [/^gemini-flash-lite-latest$/, /^gemini-\d+(\.\d+)?-flash-lite$/, /flash-lite/],
+  groq: [/gpt-oss-120b/, /llama-4-maverick/, /kimi-k2/, /qwen3-32b|qwen-?3/, /llama-3\.3-70b/, /gpt-oss-20b/, /llama/],
+  openrouter: [/^openrouter\/free$/, /deepseek.*:free$/, /qwen.*:free$/, /llama-4.*:free$/, /gemma.*:free$/, /gpt-oss.*:free$/, /:free$/],
+  nvidia: [/deepseek-v\d.*flash/, /kimi-k2/, /gemma-\d+-\d+b-it/, /glm-\d.*flash/, /mistral-large-3/, /nemotron-3-super/, /gpt-oss-120b/, /llama-3\.3-70b/, /deepseek/, /qwen\d?.*instruct/, /llama.*instruct/],
+  openai: [/^gpt-5(\.\d+)?-mini$/, /^gpt-4\.1-mini$/, /^gpt-4o-mini$/, /^gpt-5/, /^gpt-4/],
+  anthropic: [/sonnet/, /haiku/, /opus/],
+};
+const SKIP = /(embed|rerank|reward|guard|safety|moderat|whisper|tts|audio|speech|transcri|image|vision|-vl|parse|retriever|clip|ocr|realtime|search|instruct-?v0\.1|-base$|deepseek-r1|thinking|preview|exp-|-exp$|live|native-audio|computer)/i;
+const MLIST = new Map(), AUTO = new Map(), BAD = new Map();   // الموديلات المتاحة، اللي اتختار، واللي فشل (لمدة)
+const keyOf = (p, env) => p.id + "|" + String(env[p.keyName] || "").slice(-6);
+async function listModels(p, env) {
+  const k = keyOf(p, env), c = MLIST.get(k); if (c && Date.now() - c.t < 6 * 3600e3) return c.list;
+  const sig = AbortSignal.timeout(8000); let ids = [];
+  try {
+    if (p.kind === "gemini") {
+      const j = await (await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", { signal: sig, headers: { "x-goog-api-key": env.GEMINI_API_KEY } })).json();
+      ids = (j.models || []).filter(m => (m.supportedGenerationMethods || []).includes("generateContent")).map(m => String(m.name || "").replace(/^models\//, ""));
+    } else if (p.kind === "anthropic") {
+      const j = await (await fetch("https://api.anthropic.com/v1/models?limit=100", { signal: sig, headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" } })).json();
+      ids = (j.data || []).map(m => m.id);
+    } else if (p.kind === "openai") {
+      const j = await (await fetch(p.base(env) + "/models", { signal: sig, headers: p.headers(env) })).json();
+      ids = (j.data || j.models || []).map(m => m.id || m.name).filter(Boolean);
+    }
+  } catch { ids = []; }
+  MLIST.set(k, { t: Date.now(), list: ids }); return ids;
+}
+export function pickModel(id, ids, bad = new Set()) {
+  const ok = ids.filter(m => !bad.has(m) && !(SKIP.test(m) && !(PREFS[id] || []).some(r => r.test(m) && /flash-lite|openrouter\/free/.test(m))));
+  // الأحدث الأول جوه نفس الدرجة (gemini-3.5 قبل gemini-2.5 …)
+  const ver = m => { const v = (m.match(/(\d+(?:\.\d+)?)/) || [])[1]; return v ? +v : 0; };
+  for (const r of PREFS[id] || []) { const hit = ok.filter(m => r.test(m)).sort((a, b) => ver(b) - ver(a) || a.length - b.length); if (hit.length) return hit[0]; }
+  return "";
+}
+const badSet = p => { const m = BAD.get(p.id) || new Map(), now = Date.now(); for (const [k, t] of m) if (t < now) m.delete(k); BAD.set(p.id, m); return new Set(m.keys()); };
+const markBad = (p, model) => { const m = BAD.get(p.id) || new Map(); m.set(model, Date.now() + 24 * 3600e3); BAD.set(p.id, m); for (const k of AUTO.keys()) if (k.startsWith(p.id + "|")) AUTO.delete(k); };
+const explicitModel = (p, env) => env[p.id.toUpperCase() + "_MODEL"] || "";
+// الموديل اللي هيتستخدم دلوقتي: اللي صاحب الموقع كتبه، وإلا التلقائي، وإلا الافتراضي المكتوب في الكود
+async function modelFor(p, env) {
+  const ex = explicitModel(p, env), bad = badSet(p);
+  if (ex && !bad.has(ex)) return ex;
+  if (p.kind === "cfai") return p.defaultModel;
+  const k = keyOf(p, env), c = AUTO.get(k);
+  if (c && !bad.has(c.model) && Date.now() - c.t < 6 * 3600e3) return c.model;
+  const pick = pickModel(p.id, await listModels(p, env), bad) || (bad.has(p.defaultModel) ? "" : p.defaultModel);
+  if (pick) AUTO.set(k, { t: Date.now(), model: pick });
+  return pick || p.defaultModel;
+}
+const gone = e => e?.status === 404 || e?.status === 410 || (e?.status === 400 && /not found|does not exist|unknown model|invalid model|decommission|deprecat|end of life|no longer available|not supported for generatecontent/i.test(e?.message || ""));
+export const autoModelOf = (id, env) => { const p = byId[id]; return p ? (AUTO.get(keyOf(p, env))?.model || "") : ""; };
 const NOTHINK = new Set();
 export function thinkingFor(model, env = {}) {
   if (env.GEMINI_THINKING === "default" || NOTHINK.has(model)) return null;
@@ -86,8 +140,8 @@ export function thinkingFor(model, env = {}) {
   if (/gemini-[3-9]/.test(m)) return { thinkingLevel: /pro/.test(m) ? "low" : "minimal" };
   return null;
 }
-async function callOne(p, env, { system, msgs, imgs, max, temp, signal }) {
-  const last = msgs.length - 1, model = p.model(env);
+async function callOne(p, env, { system, msgs, imgs, max, temp, signal, model: mdl }) {
+  const last = msgs.length - 1, model = mdl || p.model(env);
   let r, pick;
   if (p.kind === "anthropic") {
     const m = msgs.map((x, i) => i === last && imgs.length ? { role: x.role, content: [...imgs.map(d => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: d } })), { type: "text", text: x.content }] } : x);
@@ -154,21 +208,26 @@ export async function chatWithFallback(env, req) {
   const errors = [];
   for (const id of cand) {
     const p = byId[id];
-    // مهلة لأول كلمة: مزوّد بطيء أو معلّق مايخليش الطالب يستنى — بعد المهلة بنعدّي للي بعده
-    const ac = new AbortController(), ms = firstMs(env, p), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "SlowProvider" })), ms);
-    const onAbort = () => ac.abort(req.signal.reason); req.signal?.addEventListener?.("abort", onAbort, { once: true });
-    try {
-      const { body, pick } = await callOne(p, env, { ...req, signal: ac.signal }), next = sseReader(body, pick);
-      const first = await next(); clearTimeout(timer); if (!first) throw fail(502, "رد فاضي");
-      const s = statOf(id); s.ok++; s.lastUsed = Date.now(); s.coolUntil = 0;
-      return { provider: id, first, next, tried: errors };
-    } catch (e0) {
-      clearTimeout(timer);
-      if (req.signal?.aborted) throw e0;
-      const slow = ac.signal.aborted && ac.signal.reason?.name === "SlowProvider", e = slow ? fail(504, `ماردش خلال ${Math.round(ms / 1000)} ثانية`) : e0;
-      if (!slow && e?.name === "AbortError") throw e;
-      const st = e?.status || 502; cool(id, st === 504 ? 503 : st, e?.retryAfter, e?.message);
-      errors.push({ id, status: st, error: String(e?.message || e).slice(0, 160) });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const model = await modelFor(p, env);
+      // مهلة لأول كلمة: مزوّد بطيء أو معلّق مايخليش الطالب يستنى — بعد المهلة بنعدّي للي بعده
+      const ac = new AbortController(), ms = firstMs(env, p), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "SlowProvider" })), ms);
+      const onAbort = () => ac.abort(req.signal.reason); req.signal?.addEventListener?.("abort", onAbort, { once: true });
+      try {
+        const { body, pick } = await callOne(p, env, { ...req, signal: ac.signal, model }), next = sseReader(body, pick);
+        const first = await next(); clearTimeout(timer); if (!first) throw fail(502, "رد فاضي");
+        const s = statOf(id); s.ok++; s.lastUsed = Date.now(); s.coolUntil = 0; s.model = model;
+        return { provider: id, model, first, next, tried: errors };
+      } catch (e0) {
+        clearTimeout(timer);
+        if (req.signal?.aborted) throw e0;
+        const slow = ac.signal.aborted && ac.signal.reason?.name === "SlowProvider", e = slow ? fail(504, `ماردش خلال ${Math.round(ms / 1000)} ثانية`) : e0;
+        if (!slow && e?.name === "AbortError") throw e;
+        const st = e?.status || 502;
+        errors.push({ id, model, status: st, error: String(e?.message || e).slice(0, 160) });
+        if (gone(e)) { markBad(p, model); continue; }   // الموديل ده اتشال أو مش متاح لحسابك: جرّب أحسن موديل بعده عند نفس المزوّد
+        cool(id, st === 504 ? 503 : st, e?.retryAfter, e?.message); break;
+      }
     }
   }
   const all429 = errors.length && errors.every(x => x.status === 429);
@@ -179,13 +238,20 @@ export async function chatWithFallback(env, req) {
 export async function testProvider(env, id) {
   const p = byId[id]; if (!p) return { ok: false, error: "مزوّد مش معروف" };
   if (!p.configured(env)) return { ok: false, error: p.kind === "cfai" ? "ربط Workers AI (باسم AI) مش موجود" : "مفيش مفتاح" };
-  const t0 = Date.now();
-  try {
-    const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "قول: أهلاً، أنا شغال." }], imgs: [], max: 600, temp: 0, signal: AbortSignal.timeout(25000) });
-    const next = sseReader(body, pick); let out = "", t; while (out.length < 200 && (t = await next())) out += t;
-    if (!out) return { ok: false, error: "رد فاضي", ms: Date.now() - t0 };
-    statOf(id).coolUntil = 0;
-    return { ok: true, reply: out.slice(0, 200), model: p.model(env), ms: Date.now() - t0 };
-  } catch (e) { const slow = e?.name === "TimeoutError" || /timed? ?out|aborted/i.test(String(e?.message));
-    return { ok: false, status: e?.status || (slow ? 504 : undefined), error: slow ? "ماردش خلال ٢٥ ثانية — الموديل بطيء أو مش متاح لحسابك دلوقتي، جرّب موديل تاني" : String(e?.message || e).slice(0, 300), ms: Date.now() - t0 }; }
+  const t0 = Date.now(), tried = [];
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const model = await modelFor(p, env);
+    try {
+      const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "قول: أهلاً، أنا شغال." }], imgs: [], max: 600, temp: 0, signal: AbortSignal.timeout(25000), model });
+      const next = sseReader(body, pick); let out = "", t; while (out.length < 200 && (t = await next())) out += t;
+      if (!out) return { ok: false, error: "رد فاضي", model, ms: Date.now() - t0 };
+      statOf(id).coolUntil = 0; statOf(id).model = model;
+      return { ok: true, reply: out.slice(0, 200), model, auto: !explicitModel(p, env), tried, ms: Date.now() - t0 };
+    } catch (e) {
+      if (gone(e)) { markBad(p, model); tried.push(model); continue; }
+      const slow = e?.name === "TimeoutError" || /timed? ?out|aborted/i.test(String(e?.message));
+      return { ok: false, status: e?.status || (slow ? 504 : undefined), model, tried, error: slow ? `ماردش خلال ٢٥ ثانية (${model}) — بطيء أو مش متاح لحسابك دلوقتي` : String(e?.message || e).slice(0, 300), ms: Date.now() - t0 };
+    }
+  }
+  return { ok: false, tried, error: "كل الموديلات اللي جربتها مش متاحة لحسابك: " + tried.join("، "), ms: Date.now() - t0 };
 }

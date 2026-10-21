@@ -9,6 +9,7 @@ const SUITES = [
   ["lint", "npx", ["eslint", "."]],
   ["server + TTS + API (unit/integration)", "node", ["tests/server.test.mjs"]],
   ["AI provider fallback chain + /admin panel", "node", ["tests/fallback.test.mjs"]],
+  ["automatic model choice (skips retired/unavailable models)", "node", ["tests/models.test.mjs"]],
   ["browser E2E (PDF, library, voice player, errors)", "node", ["tests/browser.test.mjs"]],
   ["tutor conversation + voice interrupt", "node", ["tests/conversation.test.mjs"]],
   ["study tools (exam, weakness, notes, plan, search, annotations, export, images)", "node", ["tests/study.test.mjs"]],
