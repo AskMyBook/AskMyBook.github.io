@@ -15,6 +15,7 @@
     "test:videos": "node tests/videos.test.mjs",
     "test:notebook": "node tests/notebook.test.mjs",
     "test:kurasa": "node tests/kurasa.test.mjs",
+    "test:select": "node tests/select.test.mjs",
     "test:cloud": "node tests/cloud.test.mjs",
     "lint": "eslint .",
     "test:quality": "node tests/quality.test.mjs",

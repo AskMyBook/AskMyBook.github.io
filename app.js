@@ -1091,8 +1091,8 @@ async function ocrImg(id, dataUrl) {
     return ((await (await ocrW[lang]).recognize(dataUrl)).data.text) || "";
   } catch (e) { console.warn("OCR", e); return ""; }
 }
-async function regionText(spec, n, img) {
-  let t = "";
+async function regionText(spec, n, img, { ocr = true } = {}) {
+  let t = "", layer = "";
   try {
     const pg = await doc.getPage(n), v = pg.getViewport({ scale: 1 }), tc = await pg.getTextContent();
     const mul = (a, b) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
@@ -1102,9 +1102,10 @@ async function regionText(spec, n, img) {
     const sel = all.filter(inR), total = all.reduce((a, o) => a + o.i.str.length, 0), got = sel.reduce((a, o) => a + o.i.str.length, 0), area = spec.type === "rect" ? (spec.x1 - spec.x0) * (spec.y1 - spec.y0) : 0.05;
     // لو طبقة النص كبيرة القطع (سطر/فقرة كاملة) أو المحدد أخد معظم الصفحة، مينفعش نقص بالمكان → OCR للصورة المقصوصة
     const coarse = sel.some(o => o.big) || (total > 0 && got > 0.6 * total && area < 0.45);
-    if (!coarse) t = sel.map(o => o.i.str + (o.i.hasEOL ? "\n" : " ")).join("");
+    layer = sel.map(o => o.i.str + (o.i.hasEOL ? "\n" : " ")).join(""); if (!coarse) t = layer;
   } catch {}
-  if (t.replace(/\s/g, "").length < 6) { setTyping("🔎 بقرا الجزء المحدد (OCR)..."); t = await ocrImg(cur.id, img); }
+  if (t.replace(/\s/g, "").length < 6 && ocr) { setTyping("🔎 بقرا الجزء المحدد (OCR)..."); try { t = await ocrImg(cur.id, img); } catch (e) { console.warn("ocr", e); t = ""; } }
+  if (t.replace(/\s/g, "").length < 6 && layer.replace(/\s/g, "").length >= 4) t = layer;   // الـ OCR ماشتغلش: نص الكتاب نفسه أحسن من مفيش
   t = t.normalize("NFKC").replace(/[\u200e\u200f]/g, "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
   if (t.replace(/\s/g, "").length < 4) throw new Error("مقدرتش أقرا النص اللي حددته. جرّب تحدد مساحة أوضح وأكبر شوية.");
   return t;
@@ -1127,17 +1128,28 @@ async function dictEn(w) {   // Definition + نطق + تسجيل صوت بشري
 }
 const fmtDef = (d, ar) => `**${d.w}**${d.ph ? "  " + d.ph : ""}${ar?.length ? "  —  " + ar.join("، ") : ""}\n` + d.ms.map(m => `• (${m.pos}) ${m.def}${m.ex ? `\n   مثال: ${m.ex}` : ""}`).join("\n");
 const QL = { mean: "📖 المعنى", def: "📚 Definition", say: "🔊 نطق", tr: "🌐 ترجمة" };
+// مين يقدر يشوف الصور: المزوّد المختار، أو سيرفر الموقع لو بيشوف صور (حتى لو الطالب مختار «مجاني»)
+const visProv = () => !textOnly() ? undefined : (window.PX?.on() && PX.cached()?.vision ? "server" : null);
 async function aiSel(kind, flat, img) {
   const P = { mean: "اكتب معنى كل كلمة مهمة في النص المحدد بالعربي، سطر لكل كلمة بالشكل: الكلمة — معناها.", def: "لكل مصطلح مهم في النص المحدد اكتب: التعريف (definition) بإنجليزي بسيط، وبعده معناه بالعربي، وبعده مثال قصير.", tr: "ترجم النص المحدد كله: لو إنجليزي ترجمه لعربي واضح بلهجة الطالب، ولو عربي ترجمه لإنجليزي بسيط.", say: "اقرا النص المحدد." }[kind], lc = provider() === "local";
-  if (textOnly()) return llm({ system: lc ? LOCAL_SYS : SYSTEM_I, compact: lc, messages: [{ role: "user", content: `${P}\n\nالنص المحدد:\n${flat.slice(0, 1500)}` }], max: 900 });
-  return llm({ system: SYSTEM_IV, messages: [{ role: "user", content: P }], img: img.split(",")[1], max: 1000 });
+  const vp = visProv();
+  if (vp === null || (flat && flat.replace(/\s/g, "").length >= 4 && textOnly())) return llm({ system: lc ? LOCAL_SYS : SYSTEM_I, compact: lc, messages: [{ role: "user", content: `${P}\n\nالنص المحدد:\n${flat.slice(0, 1500)}` }], max: 900 });
+  return llm({ system: SYSTEM_IV, messages: [{ role: "user", content: P }], img: img.split(",")[1], max: 1000, ...(vp ? { _prov: vp } : {}) });
 }
 async function quickSel(spec, kind) {
   if (!doc || busy) return; busy = true; const n = spec.n; let wait;
   try {
     const img = await snap(spec, n); if (innerWidth <= 800) showTab("chat");
     add("u", `${QL[kind]} — صفحة ${n}`, null, img); wait = add("a", "بفكر..."); wait.classList.add("typing"); clearPin();
-    let t = ""; if (spec.type === "band") { const bc = await bandContext(spec, n); t = (bc.target || bc.t || "").trim(); } else t = await regionText(spec, n, img);
+    // الذكي بيشوف الصور (سيرفر الموقع): لو الكتاب صور ومفيهوش نص، الصورة نفسها بتروح للذكي بدل OCR البطيء في المتصفح
+    const vp = visProv(), vis = vp !== null;
+    let t = ""; if (spec.type === "band") { const bc = await bandContext(spec, n); t = (bc.target || bc.t || "").trim(); } else t = await regionText(spec, n, img, { ocr: !vis }).catch(e => { if (vis) return ""; throw e; });
+    if (vis && t.replace(/\s/g, "").length < 4) {
+      if (kind !== "say") { const a = await aiSel(kind, "", img); wait.remove(); const nd = add("a", a); history.push({ role: "user", content: `${QL[kind]} (صورة)` }, { role: "assistant", content: a }); window.voiceAfter?.(a, nd); busy = false; return; }
+      setTyping("🔎 بقرا الجزء المحدد…");
+      t = String(await llm({ system: "You transcribe text from an image exactly. Output only the text, nothing else.", messages: [{ role: "user", content: "اكتب النص اللي في الصورة دي بالظبط زي ما هو، من غير أي شرح." }], img: img.split(",")[1], max: 500, ...(vp ? { _prov: vp } : {}) }) || "").trim();
+      if (!t) throw new Error("مقدرتش أقرا النص اللي حددته. جرّب تحدد مساحة أوضح وأكبر شوية.");
+    }
     const flat = t.replace(/\s+/g, " ").trim(), letters = flat.replace(/[^A-Za-z\u0621-\u064A]/g, ""), share = letters ? (flat.match(/[A-Za-z]/g) || []).length / letters.length : 0;
     const vocab = share > .6 ? englishWords(flat) : null, words = share > .6 ? (vocab || [...new Set(flat.match(/[A-Za-z][A-Za-z'’-]+/g) || [])]).slice(0, 10) : null, sentence = !!words && !vocab && words.length >= 5;
     let out = "", audios = [];
@@ -1171,9 +1183,9 @@ async function askSpec(spec) {
   try {
     const img = await snap(spec, n); if (innerWidth <= 800) showTab("chat");
     add("u", label, null, img); wait = add("a", "بفكر..."); wait.classList.add("typing"); clearPin();
-    const loc = textOnly(), bc = loc && spec?.type === "band" ? await bandContext(spec, n) : null, t = bc ? bc.t : loc ? (spec ? await regionText(spec, n, img) : await pageText(cur.id, n)) : "";
+    const vp = visProv(), loc = vp === null, bc = loc && spec?.type === "band" ? await bandContext(spec, n) : null, t = bc ? bc.t : loc ? (spec ? await regionText(spec, n, img) : await pageText(cur.id, n)) : "";
     const a = loc ? await llm({ system: bc ? SYSTEM_B : spec ? SYSTEM_R : SYSTEM, messages: [{ role: "user", content: bc ? bandPrompt(n, name, bc) : spec ? regionPrompt(spec, n, name, t) : `دي صفحة ${n} من كتاب ${name}. حل الأسئلة الموجودة في النص ده واشرح كل إجابة باختصار، ولو النص شرح مش أسئلة لخّصه ببساطة.\n\nنص الصفحة (مستخرج آليًا وممكن فيه أخطاء):\n${t.slice(0, 2800)}` }], max: Math.min(max, spec ? 800 : 1200) })
-      : await llm({ system: spec ? SYSTEM_RV : SYSTEM_V, messages: [{ role: "user", content: prompt }], img: img.split(",")[1], max: spec ? Math.min(max, 900) : max });
+      : await llm({ system: spec ? SYSTEM_RV : SYSTEM_V, messages: [{ role: "user", content: prompt }], img: img.split(",")[1], max: spec ? Math.min(max, 900) : max, ...(vp ? { _prov: vp } : {}) });
     wait.remove(); history.push({ role: "user", content: `${label} (${name})` }, { role: "assistant", content: a }); const node = add("a", a); window.voiceAfter?.(a, node);
   } catch (err) { wait?.remove(); add("a", errMsg(err)); }
   busy = false;
