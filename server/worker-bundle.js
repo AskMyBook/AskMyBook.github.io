@@ -813,7 +813,7 @@ async function testProvider(env, id) {
   if (!p) return { ok: false, error: "\u0645\u0632\u0648\u0651\u062F \u0645\u0634 \u0645\u0639\u0631\u0648\u0641" };
   if (!p.configured(env)) return { ok: false, error: p.kind === "cfai" ? "\u0631\u0628\u0637 Workers AI (\u0628\u0627\u0633\u0645 AI) \u0645\u0634 \u0645\u0648\u062C\u0648\u062F" : "\u0645\u0641\u064A\u0634 \u0645\u0641\u062A\u0627\u062D" };
   const t0 = Date.now(), tried = [], ms = Math.min(15e3, firstMs(env, p));
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 10 && Date.now() - t0 < 5e4; attempt++) {
     const model = await modelFor2(p, env), ac = new AbortController(), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "TimeoutError" })), ms);
     try {
       const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "\u0642\u0648\u0644: \u0623\u0647\u0644\u0627\u064B\u060C \u0623\u0646\u0627 \u0634\u063A\u0627\u0644." }], imgs: [], max: 300, temp: 0, signal: ac.signal, model });

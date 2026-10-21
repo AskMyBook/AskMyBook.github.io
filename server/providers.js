@@ -242,7 +242,8 @@ export async function testProvider(env, id) {
   const p = byId[id]; if (!p) return { ok: false, error: "مزوّد مش معروف" };
   if (!p.configured(env)) return { ok: false, error: p.kind === "cfai" ? "ربط Workers AI (باسم AI) مش موجود" : "مفيش مفتاح" };
   const t0 = Date.now(), tried = [], ms = Math.min(15000, firstMs(env, p));
-  for (let attempt = 0; attempt < 4; attempt++) {
+  // بيجرّب لحد ١٠ موديلات في حدود ٥٠ ثانية (اللي «مش متاح» بيرد فورًا، فممكن يعدّي كذا واحد بسرعة)
+  for (let attempt = 0; attempt < 10 && Date.now() - t0 < 50000; attempt++) {
     const model = await modelFor(p, env), ac = new AbortController(), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "TimeoutError" })), ms);
     try {
       const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "قول: أهلاً، أنا شغال." }], imgs: [], max: 300, temp: 0, signal: ac.signal, model });
