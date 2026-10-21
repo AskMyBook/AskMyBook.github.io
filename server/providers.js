@@ -18,7 +18,9 @@ export const CHAT_PROVIDERS = [
   { id: "geminilite", label: "Google Gemini Lite (احتياطي)", keyName: "GEMINI_API_KEY", link: "https://aistudio.google.com/apikey", kind: "gemini",
     configured: env => !!env.GEMINI_API_KEY, model: env => env.GEMINILITE_MODEL || "gemini-flash-lite-latest", defaultModel: "gemini-flash-lite-latest", vision: () => true },
   oa("groq", "Groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY", "openai/gpt-oss-120b", false, "https://console.groq.com/keys"),
+  oa("cerebras", "Cerebras (سريع جدًا)", "https://api.cerebras.ai/v1", "CEREBRAS_API_KEY", "gpt-oss-120b", false, "https://cloud.cerebras.ai/platform"),
   oa("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", "openrouter/free", true, "https://openrouter.ai/settings/keys", { "x-title": "Study Tutor" }),
+  oa("mistral", "Mistral", "https://api.mistral.ai/v1", "MISTRAL_API_KEY", "mistral-small-latest", false, "https://console.mistral.ai/api-keys"),
   oa("nvidia", "NVIDIA NIM", "https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY", "meta/llama-3.3-70b-instruct", false, "https://build.nvidia.com/settings/api-keys"),
   { id: "cloudflare", label: "Cloudflare Workers AI", keyName: "", link: "https://developers.cloudflare.com/workers-ai/", kind: "cfai",
     configured: env => !!env.AI?.run, model: env => env.CLOUDFLARE_MODEL || "@cf/meta/llama-3.3-70b-instruct-fp8-fast", defaultModel: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", vision: () => false },
@@ -86,6 +88,8 @@ const PREFS = {
   openrouter: [/^openrouter\/free$/, /deepseek.*:free$/, /qwen.*:free$/, /llama-4.*:free$/, /gemma.*:free$/, /gpt-oss.*:free$/, /:free$/],
   // الأسرع والمش «بيفكر» الأول (موديلات التفكير زي deepseek بتسكت دقيقة قبل أول كلمة)
   nvidia: [/gemma-\d+-\d+b-it/, /mistral-large-3/, /llama-4-maverick/, /mistral-large-2/, /glm-\d.*flash/, /kimi-k2/, /llama-3\.\d-\d+b-instruct/, /deepseek-v\d.*flash/, /nemotron-3-super/, /gpt-oss-120b/, /qwen\d?.*instruct/, /llama.*instruct/],
+  cerebras: [/gpt-oss-120b/, /llama-4-maverick/, /qwen-3-235b/, /llama-3\.3-70b/, /llama-4-scout/, /qwen/, /llama/],
+  mistral: [/^mistral-medium-latest$/, /^mistral-small-latest$/, /^mistral-large-latest$/, /^mistral-medium/, /^mistral-small/, /^mistral-large/, /^open-mistral/],
   openai: [/^gpt-5(\.\d+)?-mini$/, /^gpt-4\.1-mini$/, /^gpt-4o-mini$/, /^gpt-5/, /^gpt-4/],
   anthropic: [/sonnet/, /haiku/, /opus/],
 };
@@ -253,7 +257,8 @@ export async function testProvider(env, id) {
       try { ac.abort(); } catch {}
       if (!out) { tried.push(model + " (رد فاضي)"); if (!explicitModel(p, env)) { markSlow(p, model); continue; } return { ok: false, error: "رد فاضي", model, tried, ms: Date.now() - t0 }; }
       statOf(id).coolUntil = 0; statOf(id).model = model;
-      return { ok: true, reply: out.slice(0, 200), model, auto: !explicitModel(p, env), tried, ms: Date.now() - t0 };
+      const count = p.kind === "cfai" ? 0 : (MLIST.get(keyOf(p, env))?.list || []).filter(m => !SKIP.test(m)).length;
+      return { ok: true, reply: out.slice(0, 200), model, auto: !explicitModel(p, env), tried, count, ms: Date.now() - t0 };
     } catch (e) {
       clearTimeout(timer);
       const slow = ac.signal.aborted || e?.name === "TimeoutError" || /timed? ?out|aborted/i.test(String(e?.message));

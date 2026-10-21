@@ -28,7 +28,7 @@ label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}.num{widt
 
 <div id="app" class="hide">
  <div id="warn"></div>
- <div class="card"><h2>المزوّدين (بالترتيب)</h2>
+ <div class="card"><div class="row"><h2 class="grow">المزوّدين (بالترتيب)</h2><button class="ghost sm" id="testAll">🔌 اختبر الكل</button></div>
   <p class="mute">السيرفر بيبدأ بالأول، ولو خلص حصته أو وقع بينط للي بعده لوحده. رتّبهم بالأسهم. اللي مفيهوش مفتاح بيتعدّى.</p>
   <div id="provs"></div></div>
  <div class="card"><h2>الموقع المسموح له يكلّم السيرفر</h2>
@@ -96,8 +96,11 @@ $("provs").addEventListener("click",function(e){var b=e.target.closest("button")
  else if(d.tg){i=DIS.indexOf(d.tg);if(i>=0)DIS.splice(i,1);else DIS.push(d.tg);draw()}
  else if(d.del){if(confirm("تمسح المفتاح ده؟"))api("save",{keys:(function(o){o[d.del]="__delete__";return o})({})}).then(load)}
  else if(d.rest){api("reset-rest",{id:d.rest}).then(load)}
- else if(d.test){var out=document.querySelector('[data-out="'+d.test+'"]');out.innerHTML='<div class="msg">بيجرّب… (لو لسه حاطط مفتاح جديد، احفظ الأول)</div>';
-  api("test",{id:d.test}).then(function(r){out.innerHTML=r.ok?'<div class="msg ok">✅ شغال ('+r.ms+" ms، "+(r.auto?"اختار تلقائي: ":"")+esc(r.model)+"): "+esc(r.reply)+(r.tried&&r.tried.length?"<br><small>مش متاحين لحسابك واتعدّوا: "+esc(r.tried.join("، "))+"</small>":"")+"</div>":'<div class="msg bad">❌ '+esc(r.error)+(r.tried&&r.tried.length?"<br><small>جربت: "+esc(r.tried.join("، "))+"</small>":"")+"</div>"}).catch(function(x){note(out,x.message,"bad")})}});
+ else if(d.test){runTest(d.test)}
+});
+function runTest(id){var out=document.querySelector('[data-out="'+id+'"]');if(!out)return Promise.resolve();out.innerHTML='<div class="msg">بيجرّب… (لو لسه حاطط مفتاح جديد، احفظ الأول)</div>';
+ return api("test",{id:id}).then(function(r){out.innerHTML=r.ok?'<div class="msg ok">✅ شغال'+(r.count?" · "+r.count+" موديل":"")+' — '+(r.auto?"اختار: ":"")+'<b class="ltr">'+esc(r.model)+"</b> ("+(r.ms/1000).toFixed(1)+" ث)"+(r.tried&&r.tried.length?"<br><small>اتعدّوا: "+esc(r.tried.join("، "))+"</small>":"")+"</div>":'<div class="msg bad">❌ '+esc(r.error)+(r.tried&&r.tried.length?"<br><small>جربت: "+esc(r.tried.join("، "))+"</small>":"")+"</div>"}).catch(function(x){note(out,x.message,"bad")})}
+$("testAll").onclick=function(){var b=this;b.disabled=true;b.textContent="بيجرّب الكل…";Promise.all(S.providers.filter(function(p){return p.configured&&DIS.indexOf(p.id)<0}).map(function(p){return runTest(p.id)})).then(function(){b.disabled=false;b.textContent="🔌 اختبر الكل"})};
 $("presetp").onclick=function(){if(confirm("ترجع للشخصية الأصلية؟ التعديلات بتاعتك هتتمسح.")){api("save",{vars:{TEACHER_PERSONA:""}}).then(load)}};
 $("save").onclick=function(){var keys={},vars={};
  document.querySelectorAll("[data-key]").forEach(function(x){if(x.value.trim())keys[x.dataset.key]=x.value.trim()});

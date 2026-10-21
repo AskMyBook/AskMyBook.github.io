@@ -462,7 +462,9 @@ var CHAT_PROVIDERS = [
     vision: () => true
   },
   oa("groq", "Groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY", "openai/gpt-oss-120b", false, "https://console.groq.com/keys"),
+  oa("cerebras", "Cerebras (\u0633\u0631\u064A\u0639 \u062C\u062F\u064B\u0627)", "https://api.cerebras.ai/v1", "CEREBRAS_API_KEY", "gpt-oss-120b", false, "https://cloud.cerebras.ai/platform"),
   oa("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", "openrouter/free", true, "https://openrouter.ai/settings/keys", { "x-title": "Study Tutor" }),
+  oa("mistral", "Mistral", "https://api.mistral.ai/v1", "MISTRAL_API_KEY", "mistral-small-latest", false, "https://console.mistral.ai/api-keys"),
   oa("nvidia", "NVIDIA NIM", "https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY", "meta/llama-3.3-70b-instruct", false, "https://build.nvidia.com/settings/api-keys"),
   {
     id: "cloudflare",
@@ -573,6 +575,8 @@ var PREFS = {
   openrouter: [/^openrouter\/free$/, /deepseek.*:free$/, /qwen.*:free$/, /llama-4.*:free$/, /gemma.*:free$/, /gpt-oss.*:free$/, /:free$/],
   // الأسرع والمش «بيفكر» الأول (موديلات التفكير زي deepseek بتسكت دقيقة قبل أول كلمة)
   nvidia: [/gemma-\d+-\d+b-it/, /mistral-large-3/, /llama-4-maverick/, /mistral-large-2/, /glm-\d.*flash/, /kimi-k2/, /llama-3\.\d-\d+b-instruct/, /deepseek-v\d.*flash/, /nemotron-3-super/, /gpt-oss-120b/, /qwen\d?.*instruct/, /llama.*instruct/],
+  cerebras: [/gpt-oss-120b/, /llama-4-maverick/, /qwen-3-235b/, /llama-3\.3-70b/, /llama-4-scout/, /qwen/, /llama/],
+  mistral: [/^mistral-medium-latest$/, /^mistral-small-latest$/, /^mistral-large-latest$/, /^mistral-medium/, /^mistral-small/, /^mistral-large/, /^open-mistral/],
   openai: [/^gpt-5(\.\d+)?-mini$/, /^gpt-4\.1-mini$/, /^gpt-4o-mini$/, /^gpt-5/, /^gpt-4/],
   anthropic: [/sonnet/, /haiku/, /opus/]
 };
@@ -840,7 +844,8 @@ async function testProvider(env, id) {
       }
       statOf(id).coolUntil = 0;
       statOf(id).model = model;
-      return { ok: true, reply: out.slice(0, 200), model, auto: !explicitModel(p, env), tried, ms: Date.now() - t0 };
+      const count = p.kind === "cfai" ? 0 : (MLIST.get(keyOf(p, env))?.list || []).filter((m) => !SKIP.test(m)).length;
+      return { ok: true, reply: out.slice(0, 200), model, auto: !explicitModel(p, env), tried, count, ms: Date.now() - t0 };
     } catch (e) {
       clearTimeout(timer);
       const slow = ac.signal.aborted || e?.name === "TimeoutError" || /timed? ?out|aborted/i.test(String(e?.message));
@@ -890,7 +895,7 @@ label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}.num{widt
 
 <div id="app" class="hide">
  <div id="warn"></div>
- <div class="card"><h2>المزوّدين (بالترتيب)</h2>
+ <div class="card"><div class="row"><h2 class="grow">المزوّدين (بالترتيب)</h2><button class="ghost sm" id="testAll">🔌 اختبر الكل</button></div>
   <p class="mute">السيرفر بيبدأ بالأول، ولو خلص حصته أو وقع بينط للي بعده لوحده. رتّبهم بالأسهم. اللي مفيهوش مفتاح بيتعدّى.</p>
   <div id="provs"></div></div>
  <div class="card"><h2>الموقع المسموح له يكلّم السيرفر</h2>
@@ -958,8 +963,11 @@ $("provs").addEventListener("click",function(e){var b=e.target.closest("button")
  else if(d.tg){i=DIS.indexOf(d.tg);if(i>=0)DIS.splice(i,1);else DIS.push(d.tg);draw()}
  else if(d.del){if(confirm("تمسح المفتاح ده؟"))api("save",{keys:(function(o){o[d.del]="__delete__";return o})({})}).then(load)}
  else if(d.rest){api("reset-rest",{id:d.rest}).then(load)}
- else if(d.test){var out=document.querySelector('[data-out="'+d.test+'"]');out.innerHTML='<div class="msg">بيجرّب… (لو لسه حاطط مفتاح جديد، احفظ الأول)</div>';
-  api("test",{id:d.test}).then(function(r){out.innerHTML=r.ok?'<div class="msg ok">✅ شغال ('+r.ms+" ms، "+(r.auto?"اختار تلقائي: ":"")+esc(r.model)+"): "+esc(r.reply)+(r.tried&&r.tried.length?"<br><small>مش متاحين لحسابك واتعدّوا: "+esc(r.tried.join("، "))+"</small>":"")+"</div>":'<div class="msg bad">❌ '+esc(r.error)+(r.tried&&r.tried.length?"<br><small>جربت: "+esc(r.tried.join("، "))+"</small>":"")+"</div>"}).catch(function(x){note(out,x.message,"bad")})}});
+ else if(d.test){runTest(d.test)}
+});
+function runTest(id){var out=document.querySelector('[data-out="'+id+'"]');if(!out)return Promise.resolve();out.innerHTML='<div class="msg">بيجرّب… (لو لسه حاطط مفتاح جديد، احفظ الأول)</div>';
+ return api("test",{id:id}).then(function(r){out.innerHTML=r.ok?'<div class="msg ok">✅ شغال'+(r.count?" · "+r.count+" موديل":"")+' — '+(r.auto?"اختار: ":"")+'<b class="ltr">'+esc(r.model)+"</b> ("+(r.ms/1000).toFixed(1)+" ث)"+(r.tried&&r.tried.length?"<br><small>اتعدّوا: "+esc(r.tried.join("، "))+"</small>":"")+"</div>":'<div class="msg bad">❌ '+esc(r.error)+(r.tried&&r.tried.length?"<br><small>جربت: "+esc(r.tried.join("، "))+"</small>":"")+"</div>"}).catch(function(x){note(out,x.message,"bad")})}
+$("testAll").onclick=function(){var b=this;b.disabled=true;b.textContent="بيجرّب الكل…";Promise.all(S.providers.filter(function(p){return p.configured&&DIS.indexOf(p.id)<0}).map(function(p){return runTest(p.id)})).then(function(){b.disabled=false;b.textContent="🔌 اختبر الكل"})};
 $("presetp").onclick=function(){if(confirm("ترجع للشخصية الأصلية؟ التعديلات بتاعتك هتتمسح.")){api("save",{vars:{TEACHER_PERSONA:""}}).then(load)}};
 $("save").onclick=function(){var keys={},vars={};
  document.querySelectorAll("[data-key]").forEach(function(x){if(x.value.trim())keys[x.dataset.key]=x.value.trim()});
@@ -974,7 +982,7 @@ start();
 </script></body></html>`;
 
 // admin.js
-var KEY_NAMES = ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "NVIDIA_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "YOUTUBE_API_KEY"];
+var KEY_NAMES = ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "NVIDIA_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "YOUTUBE_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY"];
 var VAR_NAMES = [
   "ALLOWED_ORIGINS",
   "LLM_ORDER",
