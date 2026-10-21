@@ -576,7 +576,8 @@ var PREFS = {
   // الأسرع والمش «بيفكر» الأول (موديلات التفكير زي deepseek بتسكت دقيقة قبل أول كلمة)
   nvidia: [/gemma-\d+-\d+b-it/, /mistral-large-3/, /llama-4-maverick/, /mistral-large-2/, /glm-\d.*flash/, /kimi-k2/, /llama-3\.\d-\d+b-instruct/, /deepseek-v\d.*flash/, /nemotron-3-super/, /gpt-oss-120b/, /qwen\d?.*instruct/, /llama.*instruct/],
   cerebras: [/gpt-oss-120b/, /llama-4-maverick/, /qwen-3-235b/, /llama-3\.3-70b/, /llama-4-scout/, /qwen/, /llama/],
-  mistral: [/^mistral-medium-latest$/, /^mistral-small-latest$/, /^mistral-large-latest$/, /^mistral-medium/, /^mistral-small/, /^mistral-large/, /^open-mistral/],
+  mistral: [/^mistral-small-latest$/, /^mistral-medium-latest$/, /^mistral-small/, /^mistral-medium/, /^mistral-large-latest$/, /^open-mistral/],
+  // small الأول: حدوده في الخطة المجانية أوسع
   openai: [/^gpt-5(\.\d+)?-mini$/, /^gpt-4\.1-mini$/, /^gpt-4o-mini$/, /^gpt-5/, /^gpt-4/],
   anthropic: [/sonnet/, /haiku/, /opus/]
 };
@@ -821,6 +822,10 @@ async function chatWithFallback(env, req) {
           markBad(p, model);
           continue;
         }
+        if (st === 429 && attempt === 0 && !(+e?.retryAfter > 2)) {
+          await new Promise((r) => setTimeout(r, 1200));
+          continue;
+        }
         if (slow && !explicitModel(p, env)) markSlow(p, model);
         cool(id, st === 504 ? 503 : st, e?.retryAfter, e?.message);
         break;
@@ -834,7 +839,9 @@ async function testProvider(env, id) {
   const p = byId[id];
   if (!p) return { ok: false, error: "\u0645\u0632\u0648\u0651\u062F \u0645\u0634 \u0645\u0639\u0631\u0648\u0641" };
   if (!p.configured(env)) return { ok: false, error: p.kind === "cfai" ? "\u0631\u0628\u0637 Workers AI (\u0628\u0627\u0633\u0645 AI) \u0645\u0634 \u0645\u0648\u062C\u0648\u062F" : "\u0645\u0641\u064A\u0634 \u0645\u0641\u062A\u0627\u062D" };
-  const t0 = Date.now(), tried = [], ms = Math.min(15e3, firstMs(env, p));
+  const t0 = Date.now(), tried = [];
+  const ms = Math.min(15e3, firstMs(env, p));
+  let retried429 = false;
   for (let attempt = 0; attempt < 10 && Date.now() - t0 < 5e4; attempt++) {
     const model = await modelFor2(p, env), ac = new AbortController(), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "TimeoutError" })), ms);
     try {
@@ -870,6 +877,12 @@ async function testProvider(env, id) {
       if (gone(e)) {
         markBad(p, model);
         tried.push(model + " (\u0645\u0634 \u0645\u062A\u0627\u062D)");
+        continue;
+      }
+      if (e?.status === 429 && !retried429 && !(+e?.retryAfter > 2)) {
+        retried429 = true;
+        await new Promise((r) => setTimeout(r, 1500));
+        attempt--;
         continue;
       }
       if (slow && !explicitModel(p, env)) {

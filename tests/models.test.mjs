@@ -52,4 +52,10 @@ ok("a picture → vision", P.classifyTask({ msgs: [{ role: "user", content: "ح�
   ok("long context goes to Gemini", l.provider === "gemini" && l.task === "long", { p: l.provider, t: l.task });
   const off = await P.chatWithFallback({ ...env2, SMART_ROUTING: "off", LLM_ORDER: "groq,gemini,cerebras" }, { system: "", msgs: [{ role: "user", content: "اهلا" }], imgs: [], max: 50 });
   ok("SMART_ROUTING=off keeps the admin order", off.provider === "groq", off.provider); }
+// ٥) حد «طلب في الثانية» (429 مرة واحدة) → يستنى ثانية ويجرّب تاني بدل ما يفشل
+{ let n429 = 0; globalThis.fetch = async (u, o) => { u = String(u); if (u.endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "mistral-small-latest" }, { id: "mistral-medium-latest" }] }));
+    if (n429++ === 0) return new Response(JSON.stringify({ message: "Rate limit exceeded" }), { status: 429 });
+    return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: "أهلاً" } }] })}\n\n`); };
+  const t3 = await P.testProvider({ MISTRAL_API_KEY: "m" }, "mistral");
+  ok("Mistral: per-second limit (429) → waits and succeeds, picks mistral-small", t3.ok && t3.model === "mistral-small-latest", t3); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
