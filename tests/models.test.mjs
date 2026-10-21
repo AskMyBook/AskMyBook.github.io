@@ -57,5 +57,10 @@ ok("a picture → vision", P.classifyTask({ msgs: [{ role: "user", content: "ح�
     if (n429++ === 0) return new Response(JSON.stringify({ message: "Rate limit exceeded" }), { status: 429 });
     return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: "أهلاً" } }] })}\n\n`); };
   const t3 = await P.testProvider({ MISTRAL_API_KEY: "m" }, "mistral");
-  ok("Mistral: per-second limit (429) → waits and succeeds, picks mistral-small", t3.ok && t3.model === "mistral-small-latest", t3); }
+  ok("Mistral: per-second limit (429) → waits and succeeds", t3.ok && t3.model === "mistral-small-latest", t3); }
+{ globalThis.fetch = async (u, o) => { u = String(u); if (u.endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "mistral-small-latest" }, { id: "mistral-large-2512" }, { id: "ministral-14b-2512" }] }));
+    const m = JSON.parse(o.body).model; if (m === "mistral-large-2512") return new Response(JSON.stringify({ message: "Rate limit exceeded" }), { status: 429 });
+    return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: "أهلاً" } }] })}\n\n`); };
+  const t4 = await P.testProvider({ MISTRAL_API_KEY: "m2" }, "mistral");
+  ok("Mistral: prefers the model with big limits, and a model out of quota → another model", t4.ok && t4.model === "ministral-14b-2512" && t4.tried.some(x => /large-2512.*خلص/.test(x)), t4); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

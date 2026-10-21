@@ -89,7 +89,8 @@ const PREFS = {
   // الأسرع والمش «بيفكر» الأول (موديلات التفكير زي deepseek بتسكت دقيقة قبل أول كلمة)
   nvidia: [/gemma-\d+-\d+b-it/, /mistral-large-3/, /llama-4-maverick/, /mistral-large-2/, /glm-\d.*flash/, /kimi-k2/, /llama-3\.\d-\d+b-instruct/, /deepseek-v\d.*flash/, /nemotron-3-super/, /gpt-oss-120b/, /qwen\d?.*instruct/, /llama.*instruct/],
   cerebras: [/gpt-oss-120b/, /llama-4-maverick/, /qwen-3-235b/, /llama-3\.3-70b/, /llama-4-scout/, /qwen/, /llama/],
-  mistral: [/^mistral-small-latest$/, /^mistral-medium-latest$/, /^mistral-small/, /^mistral-medium/, /^mistral-large-latest$/, /^open-mistral/],   // small الأول: حدوده في الخطة المجانية أوسع
+  // الحدود بتختلف لكل موديل: في الخطة المجانية small/medium ليهم ٢٠ ألف توكن في الدقيقة بس، و large-2512 / ministral-14b حدودهم أكبر بكتير
+  mistral: [/^mistral-large-25\d\d$/, /^ministral-14b-25\d\d$/, /^mistral-large-latest$/, /^ministral-8b-25\d\d$/, /^mistral-small-latest$/, /^mistral-medium-latest$/, /^mistral-small/, /^open-mistral/],
   openai: [/^gpt-5(\.\d+)?-mini$/, /^gpt-4\.1-mini$/, /^gpt-4o-mini$/, /^gpt-5/, /^gpt-4/],
   anthropic: [/sonnet/, /haiku/, /opus/],
 };
@@ -122,6 +123,7 @@ export function pickModel(id, ids, bad = new Set()) {
 }
 const badSet = p => { const m = BAD.get(p.id) || new Map(), now = Date.now(); for (const [k, t] of m) if (t < now) m.delete(k); BAD.set(p.id, m); return new Set(m.keys()); };
 const markSlow = (p, model) => { const m = BAD.get(p.id) || new Map(); m.set(model, Date.now() + 6 * 3600e3); BAD.set(p.id, m); for (const k of AUTO.keys()) if (k.startsWith(p.id + "|")) AUTO.delete(k); };
+const markBusy = (p, model) => { const m = BAD.get(p.id) || new Map(); m.set(model, Date.now() + 10 * 60e3); BAD.set(p.id, m); for (const k of AUTO.keys()) if (k.startsWith(p.id + "|")) AUTO.delete(k); };
 const markBad = (p, model) => { const m = BAD.get(p.id) || new Map(); m.set(model, Date.now() + 24 * 3600e3); BAD.set(p.id, m); for (const k of AUTO.keys()) if (k.startsWith(p.id + "|")) AUTO.delete(k); };
 const explicitModel = (p, env) => env[p.id.toUpperCase() + "_MODEL"] || "";
 // الموديل اللي هيتستخدم دلوقتي: اللي صاحب الموقع كتبه، وإلا التلقائي، وإلا الافتراضي المكتوب في الكود
@@ -256,6 +258,7 @@ export async function chatWithFallback(env, req) {
         errors.push({ id, model, status: st, error: String(e?.message || e).slice(0, 160) });
         if (gone(e)) { markBad(p, model); continue; }   // الموديل ده اتشال أو مش متاح لحسابك: جرّب أحسن موديل بعده عند نفس المزوّد
         if (st === 429 && attempt === 0 && !(+e?.retryAfter > 2)) { await new Promise(r => setTimeout(r, 1200)); continue; }   // حد «طلب في الثانية» (Mistral/Cerebras المجاني): استنى ثانية وجرّب تاني مرة واحدة
+        if (st === 429 && !explicitModel(p, env) && attempt < 2) { markBusy(p, model); continue; }   // الموديل ده خلص حده: جرّب موديل تاني عند نفس المزوّد (الحد لكل موديل)
         if (slow && !explicitModel(p, env)) markSlow(p, model);   // بطيء: المرة الجاية نختار موديل غيره، ودلوقتي نروح للمزوّد اللي بعده
         cool(id, st === 504 ? 503 : st, e?.retryAfter, e?.message); break;
       }
@@ -288,6 +291,7 @@ export async function testProvider(env, id) {
       const slow = ac.signal.aborted || e?.name === "TimeoutError" || /timed? ?out|aborted/i.test(String(e?.message));
       if (gone(e)) { markBad(p, model); tried.push(model + " (مش متاح)"); continue; }
       if (e?.status === 429 && !retried429 && !(+e?.retryAfter > 2)) { retried429 = true; await new Promise(r => setTimeout(r, 1500)); attempt--; continue; }
+      if (e?.status === 429 && !explicitModel(p, env)) { markBusy(p, model); tried.push(model + " (خلص حده)"); continue; }
       if (slow && !explicitModel(p, env)) { markSlow(p, model); tried.push(model + " (بطيء)"); continue; }
       return { ok: false, status: e?.status || (slow ? 504 : undefined), model, tried, error: slow ? `ماردش خلال ${Math.round(ms / 1000)} ثانية (${model})` : String(e?.message || e).slice(0, 300), ms: Date.now() - t0 };
     }

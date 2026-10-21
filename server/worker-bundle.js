@@ -576,8 +576,8 @@ var PREFS = {
   // الأسرع والمش «بيفكر» الأول (موديلات التفكير زي deepseek بتسكت دقيقة قبل أول كلمة)
   nvidia: [/gemma-\d+-\d+b-it/, /mistral-large-3/, /llama-4-maverick/, /mistral-large-2/, /glm-\d.*flash/, /kimi-k2/, /llama-3\.\d-\d+b-instruct/, /deepseek-v\d.*flash/, /nemotron-3-super/, /gpt-oss-120b/, /qwen\d?.*instruct/, /llama.*instruct/],
   cerebras: [/gpt-oss-120b/, /llama-4-maverick/, /qwen-3-235b/, /llama-3\.3-70b/, /llama-4-scout/, /qwen/, /llama/],
-  mistral: [/^mistral-small-latest$/, /^mistral-medium-latest$/, /^mistral-small/, /^mistral-medium/, /^mistral-large-latest$/, /^open-mistral/],
-  // small الأول: حدوده في الخطة المجانية أوسع
+  // الحدود بتختلف لكل موديل: في الخطة المجانية small/medium ليهم ٢٠ ألف توكن في الدقيقة بس، و large-2512 / ministral-14b حدودهم أكبر بكتير
+  mistral: [/^mistral-large-25\d\d$/, /^ministral-14b-25\d\d$/, /^mistral-large-latest$/, /^ministral-8b-25\d\d$/, /^mistral-small-latest$/, /^mistral-medium-latest$/, /^mistral-small/, /^open-mistral/],
   openai: [/^gpt-5(\.\d+)?-mini$/, /^gpt-4\.1-mini$/, /^gpt-4o-mini$/, /^gpt-5/, /^gpt-4/],
   anthropic: [/sonnet/, /haiku/, /opus/]
 };
@@ -629,6 +629,12 @@ var badSet = (p) => {
 var markSlow = (p, model) => {
   const m = BAD.get(p.id) || /* @__PURE__ */ new Map();
   m.set(model, Date.now() + 6 * 36e5);
+  BAD.set(p.id, m);
+  for (const k of AUTO2.keys()) if (k.startsWith(p.id + "|")) AUTO2.delete(k);
+};
+var markBusy = (p, model) => {
+  const m = BAD.get(p.id) || /* @__PURE__ */ new Map();
+  m.set(model, Date.now() + 10 * 6e4);
   BAD.set(p.id, m);
   for (const k of AUTO2.keys()) if (k.startsWith(p.id + "|")) AUTO2.delete(k);
 };
@@ -826,6 +832,10 @@ async function chatWithFallback(env, req) {
           await new Promise((r) => setTimeout(r, 1200));
           continue;
         }
+        if (st === 429 && !explicitModel(p, env) && attempt < 2) {
+          markBusy(p, model);
+          continue;
+        }
         if (slow && !explicitModel(p, env)) markSlow(p, model);
         cool(id, st === 504 ? 503 : st, e?.retryAfter, e?.message);
         break;
@@ -883,6 +893,11 @@ async function testProvider(env, id) {
         retried429 = true;
         await new Promise((r) => setTimeout(r, 1500));
         attempt--;
+        continue;
+      }
+      if (e?.status === 429 && !explicitModel(p, env)) {
+        markBusy(p, model);
+        tried.push(model + " (\u062E\u0644\u0635 \u062D\u062F\u0647)");
         continue;
       }
       if (slow && !explicitModel(p, env)) {
