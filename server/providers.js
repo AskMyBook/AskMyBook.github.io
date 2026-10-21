@@ -140,6 +140,8 @@ function sseReader(body, pick) {
   };
 }
 
+// مهلة أول كلمة لكل مزوّد (FIRST_TOKEN_MS بالمللي ثانية، الافتراضي ٢٠ ثانية)
+const firstMs = (env, p) => Math.max(5000, +env.FIRST_TOKEN_MS || 20000);
 // ---------- السلسلة: بنجرّب لحد ما مزوّد يطلّع أول كلمة فعلًا ----------
 // (لو مزوّد رجّع 200 بس الرد فاضي أو وقع قبل أول كلمة، بنعدّي للي بعده من غير ما الطالب يحس)
 export async function chatWithFallback(env, req) {
@@ -152,14 +154,20 @@ export async function chatWithFallback(env, req) {
   const errors = [];
   for (const id of cand) {
     const p = byId[id];
+    // مهلة لأول كلمة: مزوّد بطيء أو معلّق مايخليش الطالب يستنى — بعد المهلة بنعدّي للي بعده
+    const ac = new AbortController(), ms = firstMs(env, p), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "SlowProvider" })), ms);
+    const onAbort = () => ac.abort(req.signal.reason); req.signal?.addEventListener?.("abort", onAbort, { once: true });
     try {
-      const { body, pick } = await callOne(p, env, req), next = sseReader(body, pick);
-      const first = await next(); if (!first) throw fail(502, "رد فاضي");
+      const { body, pick } = await callOne(p, env, { ...req, signal: ac.signal }), next = sseReader(body, pick);
+      const first = await next(); clearTimeout(timer); if (!first) throw fail(502, "رد فاضي");
       const s = statOf(id); s.ok++; s.lastUsed = Date.now(); s.coolUntil = 0;
       return { provider: id, first, next, tried: errors };
-    } catch (e) {
-      if (e?.name === "AbortError") throw e;
-      const st = e?.status || 502; cool(id, st, e?.retryAfter, e?.message);
+    } catch (e0) {
+      clearTimeout(timer);
+      if (req.signal?.aborted) throw e0;
+      const slow = ac.signal.aborted && ac.signal.reason?.name === "SlowProvider", e = slow ? fail(504, `ماردش خلال ${Math.round(ms / 1000)} ثانية`) : e0;
+      if (!slow && e?.name === "AbortError") throw e;
+      const st = e?.status || 502; cool(id, st === 504 ? 503 : st, e?.retryAfter, e?.message);
       errors.push({ id, status: st, error: String(e?.message || e).slice(0, 160) });
     }
   }
@@ -178,5 +186,6 @@ export async function testProvider(env, id) {
     if (!out) return { ok: false, error: "رد فاضي", ms: Date.now() - t0 };
     statOf(id).coolUntil = 0;
     return { ok: true, reply: out.slice(0, 200), model: p.model(env), ms: Date.now() - t0 };
-  } catch (e) { return { ok: false, status: e?.status, error: String(e?.message || e).slice(0, 300), ms: Date.now() - t0 }; }
+  } catch (e) { const slow = e?.name === "TimeoutError" || /timed? ?out|aborted/i.test(String(e?.message));
+    return { ok: false, status: e?.status || (slow ? 504 : undefined), error: slow ? "ماردش خلال ٢٥ ثانية — الموديل بطيء أو مش متاح لحسابك دلوقتي، جرّب موديل تاني" : String(e?.message || e).slice(0, 300), ms: Date.now() - t0 }; }
 }

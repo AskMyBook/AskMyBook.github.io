@@ -675,6 +675,7 @@ function sseReader(body, pick) {
     }
   };
 }
+var firstMs = (env, p) => Math.max(5e3, +env.FIRST_TOKEN_MS || 2e4);
 async function chatWithFallback(env, req) {
   const chain = chatChain(env);
   if (!chain.length) throw fail(400, "\u0645\u0641\u064A\u0634 \u0645\u0632\u0648\u0651\u062F \u0630\u0643\u0627\u0621 \u0627\u0635\u0637\u0646\u0627\u0639\u064A \u0645\u062A\u0638\u0628\u0637 \u0639\u0644\u0649 \u0627\u0644\u0633\u064A\u0631\u0641\u0631 \u2014 \u0627\u0641\u062A\u062D /admin \u0648\u062D\u0637 \u0645\u0641\u062A\u0627\u062D \u0648\u0627\u062D\u062F \u0639\u0644\u0649 \u0627\u0644\u0623\u0642\u0644");
@@ -686,19 +687,26 @@ async function chatWithFallback(env, req) {
   const errors = [];
   for (const id of cand) {
     const p = byId[id];
+    const ac = new AbortController(), ms = firstMs(env, p), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "SlowProvider" })), ms);
+    const onAbort = () => ac.abort(req.signal.reason);
+    req.signal?.addEventListener?.("abort", onAbort, { once: true });
     try {
-      const { body, pick } = await callOne(p, env, req), next = sseReader(body, pick);
+      const { body, pick } = await callOne(p, env, { ...req, signal: ac.signal }), next = sseReader(body, pick);
       const first = await next();
+      clearTimeout(timer);
       if (!first) throw fail(502, "\u0631\u062F \u0641\u0627\u0636\u064A");
       const s = statOf(id);
       s.ok++;
       s.lastUsed = Date.now();
       s.coolUntil = 0;
       return { provider: id, first, next, tried: errors };
-    } catch (e) {
-      if (e?.name === "AbortError") throw e;
+    } catch (e0) {
+      clearTimeout(timer);
+      if (req.signal?.aborted) throw e0;
+      const slow = ac.signal.aborted && ac.signal.reason?.name === "SlowProvider", e = slow ? fail(504, `\u0645\u0627\u0631\u062F\u0634 \u062E\u0644\u0627\u0644 ${Math.round(ms / 1e3)} \u062B\u0627\u0646\u064A\u0629`) : e0;
+      if (!slow && e?.name === "AbortError") throw e;
       const st = e?.status || 502;
-      cool(id, st, e?.retryAfter, e?.message);
+      cool(id, st === 504 ? 503 : st, e?.retryAfter, e?.message);
       errors.push({ id, status: st, error: String(e?.message || e).slice(0, 160) });
     }
   }
@@ -719,7 +727,8 @@ async function testProvider(env, id) {
     statOf(id).coolUntil = 0;
     return { ok: true, reply: out.slice(0, 200), model: p.model(env), ms: Date.now() - t0 };
   } catch (e) {
-    return { ok: false, status: e?.status, error: String(e?.message || e).slice(0, 300), ms: Date.now() - t0 };
+    const slow = e?.name === "TimeoutError" || /timed? ?out|aborted/i.test(String(e?.message));
+    return { ok: false, status: e?.status || (slow ? 504 : void 0), error: slow ? "\u0645\u0627\u0631\u062F\u0634 \u062E\u0644\u0627\u0644 \u0662\u0665 \u062B\u0627\u0646\u064A\u0629 \u2014 \u0627\u0644\u0645\u0648\u062F\u064A\u0644 \u0628\u0637\u064A\u0621 \u0623\u0648 \u0645\u0634 \u0645\u062A\u0627\u062D \u0644\u062D\u0633\u0627\u0628\u0643 \u062F\u0644\u0648\u0642\u062A\u064A\u060C \u062C\u0631\u0651\u0628 \u0645\u0648\u062F\u064A\u0644 \u062A\u0627\u0646\u064A" : String(e?.message || e).slice(0, 300), ms: Date.now() - t0 };
   }
 }
 
