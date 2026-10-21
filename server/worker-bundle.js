@@ -571,7 +571,8 @@ var PREFS = {
   geminilite: [/^gemini-flash-lite-latest$/, /^gemini-\d+(\.\d+)?-flash-lite$/, /flash-lite/],
   groq: [/gpt-oss-120b/, /llama-4-maverick/, /kimi-k2/, /qwen3-32b|qwen-?3/, /llama-3\.3-70b/, /gpt-oss-20b/, /llama/],
   openrouter: [/^openrouter\/free$/, /deepseek.*:free$/, /qwen.*:free$/, /llama-4.*:free$/, /gemma.*:free$/, /gpt-oss.*:free$/, /:free$/],
-  nvidia: [/deepseek-v\d.*flash/, /kimi-k2/, /gemma-\d+-\d+b-it/, /glm-\d.*flash/, /mistral-large-3/, /nemotron-3-super/, /gpt-oss-120b/, /llama-3\.3-70b/, /deepseek/, /qwen\d?.*instruct/, /llama.*instruct/],
+  // الأسرع والمش «بيفكر» الأول (موديلات التفكير زي deepseek بتسكت دقيقة قبل أول كلمة)
+  nvidia: [/gemma-\d+-\d+b-it/, /mistral-large-3/, /llama-4-maverick/, /mistral-large-2/, /glm-\d.*flash/, /kimi-k2/, /llama-3\.\d-\d+b-instruct/, /deepseek-v\d.*flash/, /nemotron-3-super/, /gpt-oss-120b/, /qwen\d?.*instruct/, /llama.*instruct/],
   openai: [/^gpt-5(\.\d+)?-mini$/, /^gpt-4\.1-mini$/, /^gpt-4o-mini$/, /^gpt-5/, /^gpt-4/],
   anthropic: [/sonnet/, /haiku/, /opus/]
 };
@@ -619,6 +620,12 @@ var badSet = (p) => {
   for (const [k, t] of m) if (t < now) m.delete(k);
   BAD.set(p.id, m);
   return new Set(m.keys());
+};
+var markSlow = (p, model) => {
+  const m = BAD.get(p.id) || /* @__PURE__ */ new Map();
+  m.set(model, Date.now() + 6 * 36e5);
+  BAD.set(p.id, m);
+  for (const k of AUTO2.keys()) if (k.startsWith(p.id + "|")) AUTO2.delete(k);
 };
 var markBad = (p, model) => {
   const m = BAD.get(p.id) || /* @__PURE__ */ new Map();
@@ -792,6 +799,7 @@ async function chatWithFallback(env, req) {
           markBad(p, model);
           continue;
         }
+        if (slow && !explicitModel(p, env)) markSlow(p, model);
         cool(id, st === 504 ? 503 : st, e?.retryAfter, e?.message);
         break;
       }
@@ -804,29 +812,52 @@ async function testProvider(env, id) {
   const p = byId[id];
   if (!p) return { ok: false, error: "\u0645\u0632\u0648\u0651\u062F \u0645\u0634 \u0645\u0639\u0631\u0648\u0641" };
   if (!p.configured(env)) return { ok: false, error: p.kind === "cfai" ? "\u0631\u0628\u0637 Workers AI (\u0628\u0627\u0633\u0645 AI) \u0645\u0634 \u0645\u0648\u062C\u0648\u062F" : "\u0645\u0641\u064A\u0634 \u0645\u0641\u062A\u0627\u062D" };
-  const t0 = Date.now(), tried = [];
+  const t0 = Date.now(), tried = [], ms = Math.min(15e3, firstMs(env, p));
   for (let attempt = 0; attempt < 4; attempt++) {
-    const model = await modelFor2(p, env);
+    const model = await modelFor2(p, env), ac = new AbortController(), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "TimeoutError" })), ms);
     try {
-      const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "\u0642\u0648\u0644: \u0623\u0647\u0644\u0627\u064B\u060C \u0623\u0646\u0627 \u0634\u063A\u0627\u0644." }], imgs: [], max: 600, temp: 0, signal: AbortSignal.timeout(25e3), model });
+      const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "\u0642\u0648\u0644: \u0623\u0647\u0644\u0627\u064B\u060C \u0623\u0646\u0627 \u0634\u063A\u0627\u0644." }], imgs: [], max: 300, temp: 0, signal: ac.signal, model });
       const next = sseReader(body, pick);
-      let out = "", t;
-      while (out.length < 200 && (t = await next())) out += t;
-      if (!out) return { ok: false, error: "\u0631\u062F \u0641\u0627\u0636\u064A", model, ms: Date.now() - t0 };
+      let out = await next() || "";
+      clearTimeout(timer);
+      const end = Date.now() + 2500;
+      while (out.length < 120 && Date.now() < end) {
+        const t = await Promise.race([next(), new Promise((r) => setTimeout(() => r(null), end - Date.now()))]);
+        if (!t) break;
+        out += t;
+      }
+      try {
+        ac.abort();
+      } catch {
+      }
+      if (!out) {
+        tried.push(model + " (\u0631\u062F \u0641\u0627\u0636\u064A)");
+        if (!explicitModel(p, env)) {
+          markSlow(p, model);
+          continue;
+        }
+        return { ok: false, error: "\u0631\u062F \u0641\u0627\u0636\u064A", model, tried, ms: Date.now() - t0 };
+      }
       statOf(id).coolUntil = 0;
       statOf(id).model = model;
       return { ok: true, reply: out.slice(0, 200), model, auto: !explicitModel(p, env), tried, ms: Date.now() - t0 };
     } catch (e) {
+      clearTimeout(timer);
+      const slow = ac.signal.aborted || e?.name === "TimeoutError" || /timed? ?out|aborted/i.test(String(e?.message));
       if (gone(e)) {
         markBad(p, model);
-        tried.push(model);
+        tried.push(model + " (\u0645\u0634 \u0645\u062A\u0627\u062D)");
         continue;
       }
-      const slow = e?.name === "TimeoutError" || /timed? ?out|aborted/i.test(String(e?.message));
-      return { ok: false, status: e?.status || (slow ? 504 : void 0), model, tried, error: slow ? `\u0645\u0627\u0631\u062F\u0634 \u062E\u0644\u0627\u0644 \u0662\u0665 \u062B\u0627\u0646\u064A\u0629 (${model}) \u2014 \u0628\u0637\u064A\u0621 \u0623\u0648 \u0645\u0634 \u0645\u062A\u0627\u062D \u0644\u062D\u0633\u0627\u0628\u0643 \u062F\u0644\u0648\u0642\u062A\u064A` : String(e?.message || e).slice(0, 300), ms: Date.now() - t0 };
+      if (slow && !explicitModel(p, env)) {
+        markSlow(p, model);
+        tried.push(model + " (\u0628\u0637\u064A\u0621)");
+        continue;
+      }
+      return { ok: false, status: e?.status || (slow ? 504 : void 0), model, tried, error: slow ? `\u0645\u0627\u0631\u062F\u0634 \u062E\u0644\u0627\u0644 ${Math.round(ms / 1e3)} \u062B\u0627\u0646\u064A\u0629 (${model})` : String(e?.message || e).slice(0, 300), ms: Date.now() - t0 };
     }
   }
-  return { ok: false, tried, error: "\u0643\u0644 \u0627\u0644\u0645\u0648\u062F\u064A\u0644\u0627\u062A \u0627\u0644\u0644\u064A \u062C\u0631\u0628\u062A\u0647\u0627 \u0645\u0634 \u0645\u062A\u0627\u062D\u0629 \u0644\u062D\u0633\u0627\u0628\u0643: " + tried.join("\u060C "), ms: Date.now() - t0 };
+  return { ok: false, tried, error: "\u0643\u0644 \u0627\u0644\u0645\u0648\u062F\u064A\u0644\u0627\u062A \u0627\u0644\u0644\u064A \u062C\u0631\u0628\u062A\u0647\u0627 \u0628\u0637\u064A\u0626\u0629 \u0623\u0648 \u0645\u0634 \u0645\u062A\u0627\u062D\u0629 \u0644\u062D\u0633\u0627\u0628\u0643 \u062F\u0644\u0648\u0642\u062A\u064A", ms: Date.now() - t0 };
 }
 
 // admin-page.js
@@ -928,7 +959,7 @@ $("provs").addEventListener("click",function(e){var b=e.target.closest("button")
  else if(d.del){if(confirm("تمسح المفتاح ده؟"))api("save",{keys:(function(o){o[d.del]="__delete__";return o})({})}).then(load)}
  else if(d.rest){api("reset-rest",{id:d.rest}).then(load)}
  else if(d.test){var out=document.querySelector('[data-out="'+d.test+'"]');out.innerHTML='<div class="msg">بيجرّب… (لو لسه حاطط مفتاح جديد، احفظ الأول)</div>';
-  api("test",{id:d.test}).then(function(r){out.innerHTML=r.ok?'<div class="msg ok">✅ شغال ('+r.ms+" ms، "+(r.auto?"اختار تلقائي: ":"")+esc(r.model)+"): "+esc(r.reply)+(r.tried&&r.tried.length?"<br><small>مش متاحين لحسابك واتعدّوا: "+esc(r.tried.join("، "))+"</small>":"")+"</div>":'<div class="msg bad">❌ '+esc(r.error)+"</div>"}).catch(function(x){note(out,x.message,"bad")})}});
+  api("test",{id:d.test}).then(function(r){out.innerHTML=r.ok?'<div class="msg ok">✅ شغال ('+r.ms+" ms، "+(r.auto?"اختار تلقائي: ":"")+esc(r.model)+"): "+esc(r.reply)+(r.tried&&r.tried.length?"<br><small>مش متاحين لحسابك واتعدّوا: "+esc(r.tried.join("، "))+"</small>":"")+"</div>":'<div class="msg bad">❌ '+esc(r.error)+(r.tried&&r.tried.length?"<br><small>جربت: "+esc(r.tried.join("، "))+"</small>":"")+"</div>"}).catch(function(x){note(out,x.message,"bad")})}});
 $("presetp").onclick=function(){if(confirm("ترجع للشخصية الأصلية؟ التعديلات بتاعتك هتتمسح.")){api("save",{vars:{TEACHER_PERSONA:""}}).then(load)}};
 $("save").onclick=function(){var keys={},vars={};
  document.querySelectorAll("[data-key]").forEach(function(x){if(x.value.trim())keys[x.dataset.key]=x.value.trim()});

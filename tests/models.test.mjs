@@ -21,10 +21,19 @@ globalThis.fetch = async (u, o) => { u = String(u);
 const env = { NVIDIA_API_KEY: "nvapi-x", LLM_ORDER: "nvidia", LLM_DISABLED: "gemini,geminilite,groq,openrouter,cloudflare,anthropic,openai" };
 const t = await P.testProvider(env, "nvidia");
 ok("«اختبر» with an empty model field finds a model that works", t.ok && t.model === "google/gemma-4-31b-it" && t.auto, t);
-ok("…and reports the models it skipped", t.tried?.includes("deepseek-ai/deepseek-v4.1-flash"), t.tried);
+ok("…preferring a fast model over a «thinking» one (no skips needed)", !seen.includes("deepseek-ai/deepseek-v4.1-flash"), seen);
 seen.length = 0;
 const r = await P.chatWithFallback({ ...env, NVIDIA_MODEL: "meta/llama-3.3-70b-instruct" }, { system: "s", msgs: [{ role: "user", content: "hi" }], imgs: [], max: 50 });
 ok("a hand-typed model that was retired (410) falls back to an available one in chat", r.provider === "nvidia" && r.model === "google/gemma-4-31b-it" && r.first, { model: r.model, seen });
 const st = P.providerStatus(env).find(p => p.id === "nvidia");
 ok("admin status shows auto + the chosen model", st.auto && st.model === "google/gemma-4-31b-it", st);
+// ٣) موديل بطيء (بيفكر وساكت) → «اختبر» بيعدّيه ويلاقي موديل أسرع
+{ const P2 = await import(new URL("../server/providers.js?slow", import.meta.url));
+  globalThis.fetch = async (u, o) => { u = String(u);
+    if (u.endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "deepseek-ai/deepseek-v4.1-flash" }, { id: "nvidia/nemotron-3-super-120b-a12b" }] }));
+    const m = JSON.parse(o.body).model;
+    if (m.includes("deepseek")) return new Promise((res, rej) => o.signal.addEventListener("abort", () => rej(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+    return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: "أهلاً" } }] })}\n\n`); };
+  const t2 = await P2.testProvider({ NVIDIA_API_KEY: "nvapi-y", FIRST_TOKEN_MS: "5000" }, "nvidia");
+  ok("a slow «thinking» model is skipped and a faster one is chosen", t2.ok && /nemotron/.test(t2.model) && t2.tried.some(x => /deepseek.*بطيء/.test(x)), t2); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

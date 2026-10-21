@@ -84,7 +84,8 @@ const PREFS = {
   geminilite: [/^gemini-flash-lite-latest$/, /^gemini-\d+(\.\d+)?-flash-lite$/, /flash-lite/],
   groq: [/gpt-oss-120b/, /llama-4-maverick/, /kimi-k2/, /qwen3-32b|qwen-?3/, /llama-3\.3-70b/, /gpt-oss-20b/, /llama/],
   openrouter: [/^openrouter\/free$/, /deepseek.*:free$/, /qwen.*:free$/, /llama-4.*:free$/, /gemma.*:free$/, /gpt-oss.*:free$/, /:free$/],
-  nvidia: [/deepseek-v\d.*flash/, /kimi-k2/, /gemma-\d+-\d+b-it/, /glm-\d.*flash/, /mistral-large-3/, /nemotron-3-super/, /gpt-oss-120b/, /llama-3\.3-70b/, /deepseek/, /qwen\d?.*instruct/, /llama.*instruct/],
+  // الأسرع والمش «بيفكر» الأول (موديلات التفكير زي deepseek بتسكت دقيقة قبل أول كلمة)
+  nvidia: [/gemma-\d+-\d+b-it/, /mistral-large-3/, /llama-4-maverick/, /mistral-large-2/, /glm-\d.*flash/, /kimi-k2/, /llama-3\.\d-\d+b-instruct/, /deepseek-v\d.*flash/, /nemotron-3-super/, /gpt-oss-120b/, /qwen\d?.*instruct/, /llama.*instruct/],
   openai: [/^gpt-5(\.\d+)?-mini$/, /^gpt-4\.1-mini$/, /^gpt-4o-mini$/, /^gpt-5/, /^gpt-4/],
   anthropic: [/sonnet/, /haiku/, /opus/],
 };
@@ -116,6 +117,7 @@ export function pickModel(id, ids, bad = new Set()) {
   return "";
 }
 const badSet = p => { const m = BAD.get(p.id) || new Map(), now = Date.now(); for (const [k, t] of m) if (t < now) m.delete(k); BAD.set(p.id, m); return new Set(m.keys()); };
+const markSlow = (p, model) => { const m = BAD.get(p.id) || new Map(); m.set(model, Date.now() + 6 * 3600e3); BAD.set(p.id, m); for (const k of AUTO.keys()) if (k.startsWith(p.id + "|")) AUTO.delete(k); };
 const markBad = (p, model) => { const m = BAD.get(p.id) || new Map(); m.set(model, Date.now() + 24 * 3600e3); BAD.set(p.id, m); for (const k of AUTO.keys()) if (k.startsWith(p.id + "|")) AUTO.delete(k); };
 const explicitModel = (p, env) => env[p.id.toUpperCase() + "_MODEL"] || "";
 // الموديل اللي هيتستخدم دلوقتي: اللي صاحب الموقع كتبه، وإلا التلقائي، وإلا الافتراضي المكتوب في الكود
@@ -226,6 +228,7 @@ export async function chatWithFallback(env, req) {
         const st = e?.status || 502;
         errors.push({ id, model, status: st, error: String(e?.message || e).slice(0, 160) });
         if (gone(e)) { markBad(p, model); continue; }   // الموديل ده اتشال أو مش متاح لحسابك: جرّب أحسن موديل بعده عند نفس المزوّد
+        if (slow && !explicitModel(p, env)) markSlow(p, model);   // بطيء: المرة الجاية نختار موديل غيره، ودلوقتي نروح للمزوّد اللي بعده
         cool(id, st === 504 ? 503 : st, e?.retryAfter, e?.message); break;
       }
     }
@@ -238,20 +241,25 @@ export async function chatWithFallback(env, req) {
 export async function testProvider(env, id) {
   const p = byId[id]; if (!p) return { ok: false, error: "مزوّد مش معروف" };
   if (!p.configured(env)) return { ok: false, error: p.kind === "cfai" ? "ربط Workers AI (باسم AI) مش موجود" : "مفيش مفتاح" };
-  const t0 = Date.now(), tried = [];
+  const t0 = Date.now(), tried = [], ms = Math.min(15000, firstMs(env, p));
   for (let attempt = 0; attempt < 4; attempt++) {
-    const model = await modelFor(p, env);
+    const model = await modelFor(p, env), ac = new AbortController(), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "TimeoutError" })), ms);
     try {
-      const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "قول: أهلاً، أنا شغال." }], imgs: [], max: 600, temp: 0, signal: AbortSignal.timeout(25000), model });
-      const next = sseReader(body, pick); let out = "", t; while (out.length < 200 && (t = await next())) out += t;
-      if (!out) return { ok: false, error: "رد فاضي", model, ms: Date.now() - t0 };
+      const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "قول: أهلاً، أنا شغال." }], imgs: [], max: 300, temp: 0, signal: ac.signal, model });
+      const next = sseReader(body, pick); let out = await next() || "";
+      clearTimeout(timer);
+      const end = Date.now() + 2500; while (out.length < 120 && Date.now() < end) { const t = await Promise.race([next(), new Promise(r => setTimeout(() => r(null), end - Date.now()))]); if (!t) break; out += t; }
+      try { ac.abort(); } catch {}
+      if (!out) { tried.push(model + " (رد فاضي)"); if (!explicitModel(p, env)) { markSlow(p, model); continue; } return { ok: false, error: "رد فاضي", model, tried, ms: Date.now() - t0 }; }
       statOf(id).coolUntil = 0; statOf(id).model = model;
       return { ok: true, reply: out.slice(0, 200), model, auto: !explicitModel(p, env), tried, ms: Date.now() - t0 };
     } catch (e) {
-      if (gone(e)) { markBad(p, model); tried.push(model); continue; }
-      const slow = e?.name === "TimeoutError" || /timed? ?out|aborted/i.test(String(e?.message));
-      return { ok: false, status: e?.status || (slow ? 504 : undefined), model, tried, error: slow ? `ماردش خلال ٢٥ ثانية (${model}) — بطيء أو مش متاح لحسابك دلوقتي` : String(e?.message || e).slice(0, 300), ms: Date.now() - t0 };
+      clearTimeout(timer);
+      const slow = ac.signal.aborted || e?.name === "TimeoutError" || /timed? ?out|aborted/i.test(String(e?.message));
+      if (gone(e)) { markBad(p, model); tried.push(model + " (مش متاح)"); continue; }
+      if (slow && !explicitModel(p, env)) { markSlow(p, model); tried.push(model + " (بطيء)"); continue; }
+      return { ok: false, status: e?.status || (slow ? 504 : undefined), model, tried, error: slow ? `ماردش خلال ${Math.round(ms / 1000)} ثانية (${model})` : String(e?.message || e).slice(0, 300), ms: Date.now() - t0 };
     }
   }
-  return { ok: false, tried, error: "كل الموديلات اللي جربتها مش متاحة لحسابك: " + tried.join("، "), ms: Date.now() - t0 };
+  return { ok: false, tried, error: "كل الموديلات اللي جربتها بطيئة أو مش متاحة لحسابك دلوقتي", ms: Date.now() - t0 };
 }
