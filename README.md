@@ -587,3 +587,10 @@
 - الاختبار: `npm run test:models`.
 - مزوّدين جداد: **Cerebras** (سريع جدًا، مجاني: https://cloud.cerebras.ai) و**Mistral** (مجاني: https://console.mistral.ai/api-keys). المفتاح بيتحط في `/admin` زي الباقي.
 - زرار **🔌 اختبر الكل** بيختبر كل المزوّدين مع بعض، وكل واحد بيبيّن «شغال · عدد الموديلات — الموديل اللي اختاره».
+
+## 🧭 التوجيه الذكي (زي Weblume AI)
+- كل سؤال بيروح الأول للمزوّد الأنسب: سؤال قصير ← Cerebras/Groq (الأسرع)، صفحات كتير من الكتاب ← Gemini/Mistral، شرح وحل ← Gemini وبعده الأسرع، صور ← اللي بيشوف صور. وبعده باقي المزوّدين بالترتيب. بيتقفل من `/admin` ← «🧭 التوجيه الذكي».
+
+## 🚀 رفع السيرفر لوحده (من غير نسخ ولزق في Cloudflare)
+- `.github/workflows/deploy-worker.yml` بيرفع `server/worker-bundle.js` على Cloudflare مع كل تحديث، وبيغيّر الكود بس (المفاتيح والـ KV والإعدادات بتفضل زي ما هي).
+- مرة واحدة: Cloudflare ← My Profile ← API Tokens ← Create Token ← قالب **Edit Cloudflare Workers** ← Create. وبعدين GitHub ← الريبو ← Settings ← Secrets and variables ← Actions ← New repository secret باسم `CLOUDFLARE_API_TOKEN`.

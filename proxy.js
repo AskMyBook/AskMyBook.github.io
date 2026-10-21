@@ -44,8 +44,8 @@
     return wantRaw ? r : r.json();
   }
   // رد الشات بالـ streaming (SSE موحّد من السيرفر: data: {"t":"..."})
-  async function chat({ system, messages, images, max, temperature, onText, signal }) {
-    const r = await post("/v1/chat", { system, messages, images, max_tokens: max, temperature, stream: true }, { signal, raw: true, ms: 120000 });
+  async function chat({ system, messages, images, max, temperature, onText, signal, purpose }) {
+    const r = await post("/v1/chat", { system, messages, images, max_tokens: max, temperature, stream: true, ...(purpose ? { purpose } : {}) }, { signal, raw: true, ms: 120000 });
     const rd = r.body.getReader(), dec = new TextDecoder(); let buf = "", out = "";
     for (;;) {
       const { done, value } = await rd.read(); if (done) break;

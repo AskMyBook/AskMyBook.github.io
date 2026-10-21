@@ -7,7 +7,7 @@ import { TEACHER_PERSONA } from "./persona.js";
 import { ADMIN_HTML } from "./admin-page.js";
 
 export const KEY_NAMES = ["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "NVIDIA_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "YOUTUBE_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY"];
-export const VAR_NAMES = ["ALLOWED_ORIGINS", "LLM_ORDER", "LLM_DISABLED", 
+export const VAR_NAMES = ["ALLOWED_ORIGINS", "LLM_ORDER", "LLM_DISABLED", "SMART_ROUTING", 
   "TEACHER_PERSONA", "QUOTA_CHAT_PER_DAY", "QUOTA_IMAGES_PER_DAY", "QUOTA_VIDEO_SEARCHES_PER_DAY"];
 
 // ---------- التخزين: KV لو موجود، وإلا ذاكرة مؤقتة (للتجربة على Node بس) ----------

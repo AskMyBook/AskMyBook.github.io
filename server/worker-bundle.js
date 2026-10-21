@@ -765,6 +765,23 @@ function sseReader(body, pick) {
   };
 }
 var firstMs = (env, p) => Math.max(5e3, +env.FIRST_TOKEN_MS || 2e4);
+var ROUTES = {
+  quick: ["cerebras", "groq", "gemini", "mistral", "openrouter", "geminilite", "nvidia"],
+  long: ["gemini", "geminilite", "mistral", "openrouter", "cerebras", "groq", "nvidia"],
+  explain: ["gemini", "cerebras", "groq", "mistral", "openrouter", "geminilite", "nvidia"]
+};
+function classifyTask({ msgs = [], system = "", imgs = [], purpose = "" } = {}) {
+  if (imgs.length) return "vision";
+  const last = [...msgs].reverse().find((m) => m.role === "user")?.content || "", ctx = String(system).length + msgs.reduce((a, m) => a + String(m.content || "").length, 0);
+  if (purpose === "query" || last.length < 220 && ctx < 3e3) return "quick";
+  if (ctx > 16e3) return "long";
+  return "explain";
+}
+function routeOrder(env, cand, task) {
+  if (String(env.SMART_ROUTING || "").toLowerCase() === "off" || !ROUTES[task]) return cand;
+  const head = ROUTES[task].filter((id) => cand.includes(id));
+  return [...head, ...cand.filter((id) => !head.includes(id))];
+}
 async function chatWithFallback(env, req) {
   const chain = chatChain(env);
   if (!chain.length) throw fail(400, "\u0645\u0641\u064A\u0634 \u0645\u0632\u0648\u0651\u062F \u0630\u0643\u0627\u0621 \u0627\u0635\u0637\u0646\u0627\u0639\u064A \u0645\u062A\u0638\u0628\u0637 \u0639\u0644\u0649 \u0627\u0644\u0633\u064A\u0631\u0641\u0631 \u2014 \u0627\u0641\u062A\u062D /admin \u0648\u062D\u0637 \u0645\u0641\u062A\u0627\u062D \u0648\u0627\u062D\u062F \u0639\u0644\u0649 \u0627\u0644\u0623\u0642\u0644");
@@ -772,7 +789,8 @@ async function chatWithFallback(env, req) {
   let cand = chain.filter((id) => !needVision || byId[id].vision(env));
   if (!cand.length) throw fail(400, "\u0645\u0641\u064A\u0634 \u0645\u0632\u0648\u0651\u062F \u0645\u062A\u0638\u0628\u0637 \u0628\u064A\u0634\u0648\u0641 \u0627\u0644\u0635\u0648\u0631 (Gemini / Claude / OpenAI)");
   const fresh = cand.filter((id) => statOf(id).coolUntil <= now), resting = cand.filter((id) => statOf(id).coolUntil > now).sort((a, b) => statOf(a).coolUntil - statOf(b).coolUntil);
-  cand = [...fresh, ...resting];
+  const task = req.task || classifyTask(req);
+  cand = [...routeOrder(env, fresh, task), ...resting];
   const errors = [];
   for (const id of cand) {
     const p = byId[id];
@@ -791,7 +809,7 @@ async function chatWithFallback(env, req) {
         s.lastUsed = Date.now();
         s.coolUntil = 0;
         s.model = model;
-        return { provider: id, model, first, next, tried: errors };
+        return { provider: id, model, task, first, next, tried: errors };
       } catch (e0) {
         clearTimeout(timer);
         if (req.signal?.aborted) throw e0;
@@ -898,6 +916,9 @@ label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}.num{widt
  <div class="card"><div class="row"><h2 class="grow">المزوّدين (بالترتيب)</h2><button class="ghost sm" id="testAll">🔌 اختبر الكل</button></div>
   <p class="mute">السيرفر بيبدأ بالأول، ولو خلص حصته أو وقع بينط للي بعده لوحده. رتّبهم بالأسهم. اللي مفيهوش مفتاح بيتعدّى.</p>
   <div id="provs"></div></div>
+ <div class="card"><h2>🧭 التوجيه الذكي</h2>
+  <label style="display:flex;gap:8px;align-items:center;color:var(--txt);font-size:14px"><input type="checkbox" id="smart" style="width:auto"> كل سؤال يروح الأول للمزوّد الأنسب ليه</label>
+  <p class="mute">سؤال قصير ← الأسرع (Cerebras / Groq). صفحات كتير من الكتاب ← Gemini / Mistral. شرح وحل ← Gemini وبعده الأسرع. صور ← اللي بيشوف صور بس. لو قفلته، السيرفر يمشي بالترتيب اللي فوق بس.</p></div>
  <div class="card"><h2>الموقع المسموح له يكلّم السيرفر</h2>
   <label>رابط موقعك (لو أكتر من واحد افصل بفاصلة)</label><input id="origins" class="ltr" placeholder="https://still-darkness-91d9.asserzaher210.workers.dev">
   <p class="mute" id="orignote"></p></div>
@@ -942,7 +963,7 @@ function load(){return api("state").then(function(s){S=s;ORDER=s.order.slice();D
   $("warn").innerHTML=w.map(function(x){return'<div class="msg bad">'+esc(x)+"</div>"}).join("");
   $("origins").value=s.vars.ALLOWED_ORIGINS||"";$("origins").placeholder=s.envVars.ALLOWED_ORIGINS||"https://still-darkness-91d9.asserzaher210.workers.dev";
   $("orignote").textContent=s.envVars.ALLOWED_ORIGINS?"متحط في إعدادات Cloudflare: "+s.envVars.ALLOWED_ORIGINS+" — اللي تكتبه هنا بيغلبه.":"لازم تحط رابط موقعك هنا، وإلا الموقع مش هيقدر يكلّم السيرفر.";
-  $("qchat").value=s.vars.QUOTA_CHAT_PER_DAY||"";$("qvid").value=s.vars.QUOTA_VIDEO_SEARCHES_PER_DAY||"";var y=s.youtube||{};$("ytl").textContent="مفتاح YouTube"+(y.admin?" — محفوظ هنا: "+y.admin:"")+(y.secret?" — متحط كـ Secret: "+y.secret:"");$("ytk").value="";$("ytk").placeholder=y.admin||y.secret?"سيبه فاضي عشان يفضل زي ما هو":"الزق المفتاح هنا";$("qimg").value=s.vars.QUOTA_IMAGES_PER_DAY||"";
+  $("smart").checked=String(s.vars.SMART_ROUTING||"").toLowerCase()!=="off";$("qchat").value=s.vars.QUOTA_CHAT_PER_DAY||"";$("qvid").value=s.vars.QUOTA_VIDEO_SEARCHES_PER_DAY||"";var y=s.youtube||{};$("ytl").textContent="مفتاح YouTube"+(y.admin?" — محفوظ هنا: "+y.admin:"")+(y.secret?" — متحط كـ Secret: "+y.secret:"");$("ytk").value="";$("ytk").placeholder=y.admin||y.secret?"سيبه فاضي عشان يفضل زي ما هو":"الزق المفتاح هنا";$("qimg").value=s.vars.QUOTA_IMAGES_PER_DAY||"";
   $("persona").value=s.persona.text;PEND={};$("pstate").textContent=s.persona.custom?"دي شخصية متعدّلة منك.":"دي الشخصية الأصلية.";
   var u=s.usage;$("usage").textContent=u?("رسايل شات: "+u.chat+" — صور: "+u.images+" — طلبة/أجهزة مختلفة: "+u.principals):"—";
   draw()})}
@@ -973,7 +994,7 @@ $("save").onclick=function(){var keys={},vars={};
  document.querySelectorAll("[data-key]").forEach(function(x){if(x.value.trim())keys[x.dataset.key]=x.value.trim()});
  document.querySelectorAll("[data-model]").forEach(function(x){vars[x.dataset.model]=x.value.trim()});
  Object.keys(PEND).forEach(function(k){if(/_API_KEY$/.test(k)){if(PEND[k].trim())keys[k]=PEND[k].trim()}else vars[k]=PEND[k].trim()});
- vars.LLM_ORDER=ORDER.join(",");vars.LLM_DISABLED=DIS.join(",");vars.ALLOWED_ORIGINS=$("origins").value.trim();vars.QUOTA_CHAT_PER_DAY=$("qchat").value.trim();vars.QUOTA_IMAGES_PER_DAY=$("qimg").value.trim();vars.QUOTA_VIDEO_SEARCHES_PER_DAY=$("qvid").value.trim();
+ vars.LLM_ORDER=ORDER.join(",");vars.LLM_DISABLED=DIS.join(",");vars.ALLOWED_ORIGINS=$("origins").value.trim();vars.SMART_ROUTING=$("smart").checked?"":"off";vars.QUOTA_CHAT_PER_DAY=$("qchat").value.trim();vars.QUOTA_IMAGES_PER_DAY=$("qimg").value.trim();vars.QUOTA_VIDEO_SEARCHES_PER_DAY=$("qvid").value.trim();
  var pv=$("persona").value;if(pv.trim()!==(S.persona.text||"").trim())vars.TEACHER_PERSONA=pv;
  $("save").disabled=true;api("save",{keys:keys,vars:vars}).then(function(){$("save").textContent="✅ اتحفظ";setTimeout(function(){$("save").textContent="💾 حفظ كل التغييرات"},2000);return load()}).catch(function(e){alert(e.message)}).then(function(){$("save").disabled=false})};
 $("cpw").onclick=function(){api("password",{password:$("npw").value}).then(function(j){T=j.token;sessionStorage.setItem("admtok",T);$("npw").value="";note($("cpm"),"✅ اتغيّر","ok")}).catch(function(e){note($("cpm"),e.message,"bad")})};
@@ -987,6 +1008,7 @@ var VAR_NAMES = [
   "ALLOWED_ORIGINS",
   "LLM_ORDER",
   "LLM_DISABLED",
+  "SMART_ROUTING",
   "TEACHER_PERSONA",
   "QUOTA_CHAT_PER_DAY",
   "QUOTA_IMAGES_PER_DAY",
@@ -1437,7 +1459,7 @@ async function chat(b, env, cors, onOut = () => {
   if (!msgs.length) throw bad("no messages");
   if (msgs.reduce((a, m) => a + m.content.length, 0) > 12e4) throw bad("\u0627\u0644\u0633\u064A\u0627\u0642 \u0643\u0628\u064A\u0631");
   const imgs = (Array.isArray(b.images) ? b.images : []).slice(0, 4).filter((x) => typeof x === "string" && x.length < 25e5 && /^[A-Za-z0-9+/=]+$/.test(x.slice(0, 200)));
-  const got = await chatWithFallback(env, { system, msgs, imgs, max, temp });
+  const got = await chatWithFallback(env, { system, msgs, imgs, max, temp, task: classifyTask({ msgs, system: b.system || "", imgs, purpose: b.purpose }) });
   M.provider = got.provider;
   const enc = new TextEncoder(), { readable, writable } = new TransformStream(), w = writable.getWriter();
   (async () => {

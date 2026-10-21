@@ -18,7 +18,7 @@
 
 import { TEACHER_PERSONA } from "./persona.js";
 import { ttsHandle, ttsInfo, ttsWarnings } from "./tts.js";
-import { chatChain, chatWithFallback, providerById } from "./providers.js";
+import { chatChain, chatWithFallback, providerById, classifyTask } from "./providers.js";
 import { adminHandle, withSettings } from "./admin.js";
 
 const LIMITS = { chat: 30, embed: 90, tts: 150, stt: 30, videos: 15, "account/delete": 3 };   // طلبات في الدقيقة لكل IP (تقريبي، لكل نسخة من السيرفر)
@@ -157,7 +157,7 @@ async function chat(b, env, cors, onOut = () => {}, M = {}) {
   if (msgs.reduce((a, m) => a + m.content.length, 0) > 120000) throw bad("السياق كبير");
   const imgs = (Array.isArray(b.images) ? b.images : []).slice(0, 4).filter(x => typeof x === "string" && x.length < 2.5e6 && /^[A-Za-z0-9+/=]+$/.test(x.slice(0, 200)));
   // السلسلة: لو الأول خلص حصته (429) أو وقع، بنجرّب اللي بعده لحد ما واحد يطلّع أول كلمة
-  const got = await chatWithFallback(env, { system, msgs, imgs, max, temp });
+  const got = await chatWithFallback(env, { system, msgs, imgs, max, temp, task: classifyTask({ msgs, system: b.system || "", imgs, purpose: b.purpose }) });
   M.provider = got.provider;
   const enc = new TextEncoder(), { readable, writable } = new TransformStream(), w = writable.getWriter();
   (async () => {

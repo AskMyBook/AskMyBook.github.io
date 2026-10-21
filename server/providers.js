@@ -204,13 +204,36 @@ function sseReader(body, pick) {
 const firstMs = (env, p) => Math.max(5000, +env.FIRST_TOKEN_MS || 20000);
 // ---------- السلسلة: بنجرّب لحد ما مزوّد يطلّع أول كلمة فعلًا ----------
 // (لو مزوّد رجّع 200 بس الرد فاضي أو وقع قبل أول كلمة، بنعدّي للي بعده من غير ما الطالب يحس)
+// ---------- التوجيه الذكي (زي Weblume AI): كل سؤال بيروح الأول للمزوّد الأنسب ليه، وبعده الباقي بالترتيب ----------
+//  quick = سؤال قصير من غير سياق كبير → الأسرع (Cerebras / Groq)
+//  long  = سياق كبير (صفحات كتير من الكتاب) → اللي بيستحمل سياق طويل (Gemini / Mistral)
+//  explain = الباقي (شرح وحل) → Gemini الأول وبعده الأسرع
+// الصور بتروح للي بيشوف صور بس (فلتر تحت). SMART_ROUTING=off يرجّع الترتيب العادي بتاع لوحة التحكم.
+export const ROUTES = {
+  quick: ["cerebras", "groq", "gemini", "mistral", "openrouter", "geminilite", "nvidia"],
+  long: ["gemini", "geminilite", "mistral", "openrouter", "cerebras", "groq", "nvidia"],
+  explain: ["gemini", "cerebras", "groq", "mistral", "openrouter", "geminilite", "nvidia"],
+};
+export function classifyTask({ msgs = [], system = "", imgs = [], purpose = "" } = {}) {
+  if (imgs.length) return "vision";
+  const last = [...msgs].reverse().find(m => m.role === "user")?.content || "", ctx = String(system).length + msgs.reduce((a, m) => a + String(m.content || "").length, 0);
+  if (purpose === "query" || (last.length < 220 && ctx < 3000)) return "quick";
+  if (ctx > 16000) return "long";
+  return "explain";
+}
+function routeOrder(env, cand, task) {
+  if (String(env.SMART_ROUTING || "").toLowerCase() === "off" || !ROUTES[task]) return cand;
+  const head = ROUTES[task].filter(id => cand.includes(id));
+  return [...head, ...cand.filter(id => !head.includes(id))];
+}
 export async function chatWithFallback(env, req) {
   const chain = chatChain(env); if (!chain.length) throw fail(400, "مفيش مزوّد ذكاء اصطناعي متظبط على السيرفر — افتح /admin وحط مفتاح واحد على الأقل");
   const now = Date.now(), needVision = req.imgs.length > 0;
   let cand = chain.filter(id => !needVision || byId[id].vision(env));
   if (!cand.length) throw fail(400, "مفيش مزوّد متظبط بيشوف الصور (Gemini / Claude / OpenAI)");
   const fresh = cand.filter(id => statOf(id).coolUntil <= now), resting = cand.filter(id => statOf(id).coolUntil > now).sort((a, b) => statOf(a).coolUntil - statOf(b).coolUntil);
-  cand = [...fresh, ...resting];   // اللي في راحة بنجرّبه في الآخر بس (يمكن حده اتجدد)
+  const task = req.task || classifyTask(req);
+  cand = [...routeOrder(env, fresh, task), ...resting];   // اللي في راحة بنجرّبه في الآخر بس (يمكن حده اتجدد)
   const errors = [];
   for (const id of cand) {
     const p = byId[id];
@@ -223,7 +246,7 @@ export async function chatWithFallback(env, req) {
         const { body, pick } = await callOne(p, env, { ...req, signal: ac.signal, model }), next = sseReader(body, pick);
         const first = await next(); clearTimeout(timer); if (!first) throw fail(502, "رد فاضي");
         const s = statOf(id); s.ok++; s.lastUsed = Date.now(); s.coolUntil = 0; s.model = model;
-        return { provider: id, model, first, next, tried: errors };
+        return { provider: id, model, task, first, next, tried: errors };
       } catch (e0) {
         clearTimeout(timer);
         if (req.signal?.aborted) throw e0;

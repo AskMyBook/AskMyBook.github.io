@@ -31,6 +31,9 @@ label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}.num{widt
  <div class="card"><div class="row"><h2 class="grow">المزوّدين (بالترتيب)</h2><button class="ghost sm" id="testAll">🔌 اختبر الكل</button></div>
   <p class="mute">السيرفر بيبدأ بالأول، ولو خلص حصته أو وقع بينط للي بعده لوحده. رتّبهم بالأسهم. اللي مفيهوش مفتاح بيتعدّى.</p>
   <div id="provs"></div></div>
+ <div class="card"><h2>🧭 التوجيه الذكي</h2>
+  <label style="display:flex;gap:8px;align-items:center;color:var(--txt);font-size:14px"><input type="checkbox" id="smart" style="width:auto"> كل سؤال يروح الأول للمزوّد الأنسب ليه</label>
+  <p class="mute">سؤال قصير ← الأسرع (Cerebras / Groq). صفحات كتير من الكتاب ← Gemini / Mistral. شرح وحل ← Gemini وبعده الأسرع. صور ← اللي بيشوف صور بس. لو قفلته، السيرفر يمشي بالترتيب اللي فوق بس.</p></div>
  <div class="card"><h2>الموقع المسموح له يكلّم السيرفر</h2>
   <label>رابط موقعك (لو أكتر من واحد افصل بفاصلة)</label><input id="origins" class="ltr" placeholder="https://still-darkness-91d9.asserzaher210.workers.dev">
   <p class="mute" id="orignote"></p></div>
@@ -75,7 +78,7 @@ function load(){return api("state").then(function(s){S=s;ORDER=s.order.slice();D
   $("warn").innerHTML=w.map(function(x){return'<div class="msg bad">'+esc(x)+"</div>"}).join("");
   $("origins").value=s.vars.ALLOWED_ORIGINS||"";$("origins").placeholder=s.envVars.ALLOWED_ORIGINS||"https://still-darkness-91d9.asserzaher210.workers.dev";
   $("orignote").textContent=s.envVars.ALLOWED_ORIGINS?"متحط في إعدادات Cloudflare: "+s.envVars.ALLOWED_ORIGINS+" — اللي تكتبه هنا بيغلبه.":"لازم تحط رابط موقعك هنا، وإلا الموقع مش هيقدر يكلّم السيرفر.";
-  $("qchat").value=s.vars.QUOTA_CHAT_PER_DAY||"";$("qvid").value=s.vars.QUOTA_VIDEO_SEARCHES_PER_DAY||"";var y=s.youtube||{};$("ytl").textContent="مفتاح YouTube"+(y.admin?" — محفوظ هنا: "+y.admin:"")+(y.secret?" — متحط كـ Secret: "+y.secret:"");$("ytk").value="";$("ytk").placeholder=y.admin||y.secret?"سيبه فاضي عشان يفضل زي ما هو":"الزق المفتاح هنا";$("qimg").value=s.vars.QUOTA_IMAGES_PER_DAY||"";
+  $("smart").checked=String(s.vars.SMART_ROUTING||"").toLowerCase()!=="off";$("qchat").value=s.vars.QUOTA_CHAT_PER_DAY||"";$("qvid").value=s.vars.QUOTA_VIDEO_SEARCHES_PER_DAY||"";var y=s.youtube||{};$("ytl").textContent="مفتاح YouTube"+(y.admin?" — محفوظ هنا: "+y.admin:"")+(y.secret?" — متحط كـ Secret: "+y.secret:"");$("ytk").value="";$("ytk").placeholder=y.admin||y.secret?"سيبه فاضي عشان يفضل زي ما هو":"الزق المفتاح هنا";$("qimg").value=s.vars.QUOTA_IMAGES_PER_DAY||"";
   $("persona").value=s.persona.text;PEND={};$("pstate").textContent=s.persona.custom?"دي شخصية متعدّلة منك.":"دي الشخصية الأصلية.";
   var u=s.usage;$("usage").textContent=u?("رسايل شات: "+u.chat+" — صور: "+u.images+" — طلبة/أجهزة مختلفة: "+u.principals):"—";
   draw()})}
@@ -106,7 +109,7 @@ $("save").onclick=function(){var keys={},vars={};
  document.querySelectorAll("[data-key]").forEach(function(x){if(x.value.trim())keys[x.dataset.key]=x.value.trim()});
  document.querySelectorAll("[data-model]").forEach(function(x){vars[x.dataset.model]=x.value.trim()});
  Object.keys(PEND).forEach(function(k){if(/_API_KEY$/.test(k)){if(PEND[k].trim())keys[k]=PEND[k].trim()}else vars[k]=PEND[k].trim()});
- vars.LLM_ORDER=ORDER.join(",");vars.LLM_DISABLED=DIS.join(",");vars.ALLOWED_ORIGINS=$("origins").value.trim();vars.QUOTA_CHAT_PER_DAY=$("qchat").value.trim();vars.QUOTA_IMAGES_PER_DAY=$("qimg").value.trim();vars.QUOTA_VIDEO_SEARCHES_PER_DAY=$("qvid").value.trim();
+ vars.LLM_ORDER=ORDER.join(",");vars.LLM_DISABLED=DIS.join(",");vars.ALLOWED_ORIGINS=$("origins").value.trim();vars.SMART_ROUTING=$("smart").checked?"":"off";vars.QUOTA_CHAT_PER_DAY=$("qchat").value.trim();vars.QUOTA_IMAGES_PER_DAY=$("qimg").value.trim();vars.QUOTA_VIDEO_SEARCHES_PER_DAY=$("qvid").value.trim();
  var pv=$("persona").value;if(pv.trim()!==(S.persona.text||"").trim())vars.TEACHER_PERSONA=pv;
  $("save").disabled=true;api("save",{keys:keys,vars:vars}).then(function(){$("save").textContent="✅ اتحفظ";setTimeout(function(){$("save").textContent="💾 حفظ كل التغييرات"},2000);return load()}).catch(function(e){alert(e.message)}).then(function(){$("save").disabled=false})};
 $("cpw").onclick=function(){api("password",{password:$("npw").value}).then(function(j){T=j.token;sessionStorage.setItem("admtok",T);$("npw").value="";note($("cpm"),"✅ اتغيّر","ok")}).catch(function(e){note($("cpm"),e.message,"bad")})};

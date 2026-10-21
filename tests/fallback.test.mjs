@@ -25,7 +25,7 @@ globalThis.fetch = async (u, init = {}) => {
 const chat = async (env, extra = {}) => { const r = await handle(new Request("https://w.dev/v1/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: [{ role: "user", content: "اشرح" }], ...extra }) }), env);
   const txt = await r.text(); return { status: r.status, prov: r.headers.get("x-llm-provider"), text: txt.split("\n").filter(l => l.startsWith("data: {")).map(l => JSON.parse(l.slice(6)).t || "").join(""), raw: txt }; };
 const fresh = () => { resetCooldown(); plan = {}; calls = []; };
-const KEYS = { GEMINI_API_KEY: "g-SECRET-1111", GROQ_API_KEY: "q-SECRET-2222", OPENROUTER_API_KEY: "o-SECRET-3333" };
+const KEYS = { GEMINI_API_KEY: "g-SECRET-1111", GROQ_API_KEY: "q-SECRET-2222", OPENROUTER_API_KEY: "o-SECRET-3333", SMART_ROUTING: "off" };   // الاختبارات دي للترتيب نفسه (التوجيه الذكي ليه اختباره في models.test)
 
 // ---------- السلسلة ----------
 fresh(); let r = await chat(KEYS);

@@ -1,0 +1,29 @@
+# رفع سيرفر الذكاء (server/worker-bundle.js) على Cloudflare لوحده مع كل تحديث — مفيش نسخ ولزق تاني.
+# بيغيّر الكود بس (Put script content)، وبيسيب المفاتيح والـ KV والـ Workers AI والإعدادات زي ما هي.
+# محتاج مرة واحدة: secret اسمه CLOUDFLARE_API_TOKEN (قالب «Edit Cloudflare Workers»). من غيره الخطوة بتتعدّى.
+name: deploy-worker
+on:
+  push:
+    branches: [main]
+    paths: ["server/worker-bundle.js", ".github/workflows/deploy-worker.yml"]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upload the server code to Cloudflare (keeps keys, KV and settings)
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || '89492eb2f6c7ba37369808e2e5c1661c' }}
+          CF_SCRIPT: ${{ vars.CLOUDFLARE_WORKER || 'study-tutor' }}
+        run: |
+          if [ -z "$CF_API_TOKEN" ]; then echo "::warning::CLOUDFLARE_API_TOKEN مش متحط في Secrets — الرفع التلقائي اتعدّى"; exit 0; fi
+          curl -sS -X PUT "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/$CF_SCRIPT/content" \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -F 'metadata={"main_module":"worker.js"};type=application/json' \
+            -F 'worker.js=@server/worker-bundle.js;type=application/javascript+module' -o out.json
+          head -c 800 out.json; echo
+          grep -q '"success": *true' out.json || { echo "::error::Cloudflare رفض الرفع — بص على الرسالة فوق"; exit 1; }
+      - name: Check the live server
+        run: sleep 5; curl -sS "https://$(echo ${{ vars.CLOUDFLARE_WORKER || 'study-tutor' }}).asserzaher210.workers.dev/v1/health" | head -c 400; echo

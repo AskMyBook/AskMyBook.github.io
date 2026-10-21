@@ -36,4 +36,20 @@ ok("admin status shows auto + the chosen model", st.auto && st.model === "google
     return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: "أهلاً" } }] })}\n\n`); };
   const t2 = await P2.testProvider({ NVIDIA_API_KEY: "nvapi-y", FIRST_TOKEN_MS: "5000" }, "nvidia");
   ok("a slow «thinking» model is skipped and a faster one is chosen", t2.ok && /nemotron/.test(t2.model) && t2.tried.some(x => /deepseek.*بطيء/.test(x)), t2); }
+// ٤) التوجيه الذكي
+ok("short question → quick", P.classifyTask({ msgs: [{ role: "user", content: "يعني إيه inertia؟" }], system: "x" }) === "quick");
+ok("lots of book pages → long", P.classifyTask({ msgs: [{ role: "user", content: "اشرحلي الدرس" }], system: "ص".repeat(20000) }) === "long");
+ok("normal explanation → explain", P.classifyTask({ msgs: [{ role: "user", content: "اشرحلي قانون نيوتن التاني بالتفصيل مع أمثلة من الكتاب ".repeat(6) }], system: "ص".repeat(5000) }) === "explain");
+ok("a picture → vision", P.classifyTask({ msgs: [{ role: "user", content: "حل" }], imgs: ["x"] }) === "vision");
+{ globalThis.fetch = async (u, o) => { u = String(u); if (u.endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "gpt-oss-120b" }, { id: "openai/gpt-oss-120b" }] }));
+    if (u.includes("generativelanguage") && u.includes("/models?")) return new Response(JSON.stringify({ models: [{ name: "models/gemini-flash-latest", supportedGenerationMethods: ["generateContent"] }] }));
+    if (u.includes("generativelanguage")) return new Response(`data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: "جيميني" }] } }] })}\n\n`);
+    return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: "سريع" } }] })}\n\n`); };
+  const env2 = { GEMINI_API_KEY: "g", CEREBRAS_API_KEY: "c", GROQ_API_KEY: "q", LLM_ORDER: "gemini,groq,cerebras" };
+  const q = await P.chatWithFallback(env2, { system: "", msgs: [{ role: "user", content: "اهلا" }], imgs: [], max: 50 });
+  ok("quick question goes to Cerebras first even though Gemini is first in the list", q.provider === "cerebras" && q.task === "quick", { p: q.provider, t: q.task });
+  const l = await P.chatWithFallback(env2, { system: "ص".repeat(20000), msgs: [{ role: "user", content: "اشرح" }], imgs: [], max: 50 });
+  ok("long context goes to Gemini", l.provider === "gemini" && l.task === "long", { p: l.provider, t: l.task });
+  const off = await P.chatWithFallback({ ...env2, SMART_ROUTING: "off", LLM_ORDER: "groq,gemini,cerebras" }, { system: "", msgs: [{ role: "user", content: "اهلا" }], imgs: [], max: 50 });
+  ok("SMART_ROUTING=off keeps the admin order", off.provider === "groq", off.provider); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

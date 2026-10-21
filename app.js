@@ -347,7 +347,7 @@ async function llm0(o) {
     try { return await llm1({ ...o, _prov: alt }); } catch (e2) { if (e2?.name === "AbortError") throw e2; e.message += " — وجرّبت كمان " + alt + ": " + String(e2?.message || e2).slice(0, 80); throw e; }
   }
 }
-async function llm1({ system, messages, img, imgs, max = 1500, long = false, compact = false, onText, noStyle = false, temperature, signal, tier, _prov }) {
+async function llm1({ system, messages, img, imgs, max = 1500, long = false, compact = false, onText, noStyle = false, temperature, signal, tier, _prov, purpose }) {
   const IM = imgs || (img ? [img] : []), provider = () => _prov || localStorage.getItem("provider") || "free";
   if (!noStyle && window.TUTOR?.styleNote) system += window.TUTOR.styleNote() + (window.TUTOR.srcNote?.() || "");
   if (provider() === "free") return freeChat({ system, messages, max, onText, signal, tier });
@@ -357,7 +357,7 @@ async function llm1({ system, messages, img, imgs, max = 1500, long = false, com
   const last = messages.length - 1;
   if (provider() === "server") {   // سيرفر الموقع: المفاتيح في environment variables على السيرفر
     if (!window.PX?.on()) throw new Error("سيرفر الـ AI مش متظبط. اختار مزوّد تاني من ⚙️.");
-    const out = await PX.chat({ system, messages: messages.map(m => ({ role: m.role, content: String(m.content) })), images: IM, max, temperature, onText, signal });
+    const out = await PX.chat({ system, messages: messages.map(m => ({ role: m.role, content: String(m.content) })), images: IM, max, temperature, onText, signal, purpose });
     return out || "(مفيش رد، جرّب تاني)";
   }
   if (provider() === "claude") {
