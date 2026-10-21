@@ -58,7 +58,7 @@ export function providerStatus(env) {
   const now = Date.now();
   return chatOrder(env).map(id => { const p = byId[id], s = statOf(id);
     return { id, label: p.label, kind: p.kind, keyName: p.keyName, link: p.link, model: explicitModel(p, env) || autoModelOf(id, env) || statOf(id).model || "", auto: !explicitModel(p, env), defaultModel: p.defaultModel, vision: !!p.vision(env),
-      configured: p.configured(env), disabled: list(env.LLM_DISABLED).includes(id), okToday: s.ok, failToday: s.fail,
+      configured: p.configured(env), disabled: list(env.LLM_DISABLED).includes(id), okToday: s.ok, failToday: s.fail, latency: s.lat || 0,
       resting: s.coolUntil > now ? Math.ceil((s.coolUntil - now) / 1000) : 0, lastError: s.lastError, lastErrorAt: s.lastErrorAt, lastUsed: s.lastUsed }; });
 }
 export const resetCooldown = id => { if (id) statOf(id).coolUntil = 0; else for (const s of STAT.values()) s.coolUntil = 0; };
@@ -140,14 +140,20 @@ async function modelFor(p, env) {
 const gone = e => e?.status === 404 || e?.status === 410 || (e?.status === 400 && /not found|does not exist|unknown model|invalid model|decommission|deprecat|end of life|no longer available|not supported for generatecontent/i.test(e?.message || ""));
 export const autoModelOf = (id, env) => { const p = byId[id]; return p ? (AUTO.get(keyOf(p, env))?.model || "") : ""; };
 const NOTHINK = new Set();
-export function thinkingFor(model, env = {}) {
-  if (env.GEMINI_THINKING === "default" || NOTHINK.has(model)) return null;
-  const m = String(model || "").toLowerCase();
-  if (/gemini-2\.5-pro/.test(m)) return { thinkingBudget: 128 };
-  if (/gemini-2\.5|flash-lite|flash-latest/.test(m)) return { thinkingBudget: 0 };
-  if (/gemini-[3-9]/.test(m)) return { thinkingLevel: /pro/.test(m) ? "low" : "minimal" };
-  return null;
+// إعدادات «فكّر قليل» بالترتيب: كل موديل بيقبل نوع (الجديد thinkingLevel، و2.5 thinkingBudget). بنجرّب الأنسب،
+// ولو الموديل رفض (400) بنجرّب اللي بعده ونفتكر اللي اشتغل — عشان أول كلمة تطلع بسرعة.
+const THINK_OK = new Map();
+export function thinkingOptions(model, env = {}) {
+  if (env.GEMINI_THINKING === "default" || NOTHINK.has(model)) return [null];
+  const m = String(model || "").toLowerCase(), pro = /pro/.test(m);
+  const all = /gemini-2\.5/.test(m) ? [pro ? { thinkingBudget: 128 } : { thinkingBudget: 0 }, null]
+    : /gemini-[3-9]/.test(m) ? [{ thinkingLevel: pro ? "low" : "minimal" }, { thinkingLevel: "low" }, null]
+    // الأسماء المختصرة (gemini-flash-latest …) ممكن تشاور على أي جيل: الجديد الأول وبعده القديم
+    : [{ thinkingLevel: pro ? "low" : "minimal" }, { thinkingBudget: pro ? 128 : 0 }, null];
+  const ok = THINK_OK.get(model);   // اللي اشتغل آخر مرة الأول (ولو الموديل اتغيّر ورفضه، الباقي لسه موجود)
+  return ok ? [ok, ...all.filter(x => JSON.stringify(x) !== JSON.stringify(ok))] : all;
 }
+export const thinkingFor = (model, env) => thinkingOptions(model, env)[0];
 async function callOne(p, env, { system, msgs, imgs, max, temp, signal, model: mdl }) {
   const last = msgs.length - 1, model = mdl || p.model(env);
   let r, pick;
@@ -158,14 +164,16 @@ async function callOne(p, env, { system, msgs, imgs, max, temp, signal, model: m
     pick = j => { if (j.type === "error") throw new Error(j.error?.message || "stream error"); return j.type === "content_block_delta" ? j.delta?.text || "" : ""; };
   } else if (p.kind === "gemini") {
     // التفكير الطويل بيأخّر أول كلمة كتير: بنطلب تفكير قليل (والمدرّس بيشرح خطوة خطوة بنفسه). GEMINI_THINKING=default يرجّعه زي ما هو.
-    const think = thinkingFor(model, env), gen = { maxOutputTokens: Math.round(max * 2.5), ...(temp != null ? { temperature: temp } : {}) };
+    const gen = { maxOutputTokens: Math.round(max * 2.5), ...(temp != null ? { temperature: temp } : {}) };
     const contents = msgs.map((x, i) => ({ role: x.role === "assistant" ? "model" : "user", parts: i === last && imgs.length ? [...imgs.map(d => ({ inline_data: { mime_type: "image/jpeg", data: d } })), { text: x.content }] : [{ text: x.content }] }));
-    r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`, { method: "POST", signal, headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: think ? { ...gen, thinkingConfig: think } : gen }) });
-    if (think && r.status === 400) {   // موديل مش بيقبل إعداد التفكير ده: نبعت تاني من غيره ونفتكر
-      const t = await r.clone().text().catch(() => "");
-      if (/thinking/i.test(t)) { NOTHINK.add(model); r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`, { method: "POST", signal, headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
-        body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: gen }) }); }
+    const opts = thinkingOptions(model, env);
+    for (let k = 0; k < opts.length; k++) {
+      const think = opts[k];
+      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`, { method: "POST", signal, headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: think ? { ...gen, thinkingConfig: think } : gen }) });
+      if (r.status === 400 && k < opts.length - 1) { await r.text().catch(() => ""); continue; }   // الموديل رفض إعداد التفكير ده: جرّب اللي بعده
+      if (r.ok) { if (think) THINK_OK.set(model, think); else if (opts.length > 1) NOTHINK.add(model); }
+      break;
     }
     pick = j => { if (j.error) throw new Error(j.error.message || "stream error"); return (j.candidates?.[0]?.content?.parts || []).map(x => x.text || "").join(""); };
   } else if (p.kind === "cfai") {
@@ -223,9 +231,14 @@ export function classifyTask({ msgs = [], system = "", imgs = [], purpose = "" }
   if (ctx > 16000) return "long";
   return "explain";
 }
+// السرعة الفعلية: متوسط الوقت لحد أول كلمة لكل مزوّد (بيتحدّث مع كل رد). اللي بقى بطيء (أكتر من ٨ ثواني)
+// بيتأخر ورا السريعين في الأسئلة العادية — بس مش في «long» لأن هناك المهم إنه يستحمل الكلام الطويل.
+const SLOW_MS = 8000;
+export const noteLatency = (id, ms) => { const s = statOf(id); s.lat = s.lat ? Math.round(s.lat * 0.6 + ms * 0.4) : ms; };
 function routeOrder(env, cand, task) {
   if (String(env.SMART_ROUTING || "").toLowerCase() === "off" || !ROUTES[task]) return cand;
-  const head = ROUTES[task].filter(id => cand.includes(id));
+  let head = ROUTES[task].filter(id => cand.includes(id));
+  if (task !== "long") { const fast = head.filter(id => !(statOf(id).lat > SLOW_MS)); head = [...fast, ...head.filter(id => !fast.includes(id))]; }
   return [...head, ...cand.filter(id => !head.includes(id))];
 }
 export async function chatWithFallback(env, req) {
@@ -242,11 +255,11 @@ export async function chatWithFallback(env, req) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const model = await modelFor(p, env);
       // مهلة لأول كلمة: مزوّد بطيء أو معلّق مايخليش الطالب يستنى — بعد المهلة بنعدّي للي بعده
-      const ac = new AbortController(), ms = firstMs(env, p), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "SlowProvider" })), ms);
+      const tStart = Date.now(), ac = new AbortController(), ms = firstMs(env, p), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "SlowProvider" })), ms);
       const onAbort = () => ac.abort(req.signal.reason); req.signal?.addEventListener?.("abort", onAbort, { once: true });
       try {
         const { body, pick } = await callOne(p, env, { ...req, signal: ac.signal, model }), next = sseReader(body, pick);
-        const first = await next(); clearTimeout(timer); if (!first) throw fail(502, "رد فاضي");
+        const t1 = Date.now(), first = await next(); clearTimeout(timer); if (!first) throw fail(502, "رد فاضي"); noteLatency(id, Date.now() - t1 + (t1 - tStart));
         const s = statOf(id); s.ok++; s.lastUsed = Date.now(); s.coolUntil = 0; s.model = model;
         return { provider: id, model, task, first, next, tried: errors };
       } catch (e0) {
@@ -275,7 +288,7 @@ export async function testProvider(env, id) {
   const t0 = Date.now(), tried = []; const ms = Math.min(15000, firstMs(env, p)); let retried429 = false;
   // بيجرّب لحد ١٠ موديلات في حدود ٥٠ ثانية (اللي «مش متاح» بيرد فورًا، فممكن يعدّي كذا واحد بسرعة)
   for (let attempt = 0; attempt < 10 && Date.now() - t0 < 50000; attempt++) {
-    const model = await modelFor(p, env), ac = new AbortController(), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "TimeoutError" })), ms);
+    const model = await modelFor(p, env), tA = Date.now(), ac = new AbortController(), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "TimeoutError" })), ms);
     try {
       const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "قول: أهلاً، أنا شغال." }], imgs: [], max: 300, temp: 0, signal: ac.signal, model });
       const next = sseReader(body, pick); let out = await next() || "";
@@ -283,7 +296,7 @@ export async function testProvider(env, id) {
       const end = Date.now() + 2500; while (out.length < 120 && Date.now() < end) { const t = await Promise.race([next(), new Promise(r => setTimeout(() => r(null), end - Date.now()))]); if (!t) break; out += t; }
       try { ac.abort(); } catch {}
       if (!out) { tried.push(model + " (رد فاضي)"); if (!explicitModel(p, env)) { markSlow(p, model); continue; } return { ok: false, error: "رد فاضي", model, tried, ms: Date.now() - t0 }; }
-      statOf(id).coolUntil = 0; statOf(id).model = model;
+      statOf(id).coolUntil = 0; statOf(id).model = model; noteLatency(id, Date.now() - tA);
       const count = p.kind === "cfai" ? 0 : (MLIST.get(keyOf(p, env))?.list || []).filter(m => !SKIP.test(m)).length;
       return { ok: true, reply: out.slice(0, 200), model, auto: !explicitModel(p, env), tried, count, ms: Date.now() - t0 };
     } catch (e) {

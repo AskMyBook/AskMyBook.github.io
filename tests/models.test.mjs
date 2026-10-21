@@ -63,4 +63,20 @@ ok("a picture → vision", P.classifyTask({ msgs: [{ role: "user", content: "ح�
     return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: "أهلاً" } }] })}\n\n`); };
   const t4 = await P.testProvider({ MISTRAL_API_KEY: "m2" }, "mistral");
   ok("Mistral: prefers the model with big limits, and a model out of quota → another model", t4.ok && t4.model === "ministral-14b-2512" && t4.tried.some(x => /large-2512.*خلص/.test(x)), t4); }
+// ٦) فكّر قليل: الموديل الجديد بيقبل thinkingLevel، والقديم بيرفضه (400) فبنجرّب thinkingBudget
+{ const sent = []; globalThis.fetch = async (u, o) => { u = String(u);
+    if (u.includes("/models?")) return new Response(JSON.stringify({ models: [{ name: "models/gemini-flash-latest", supportedGenerationMethods: ["generateContent"] }] }));
+    const g = JSON.parse(o.body).generationConfig; sent.push(g.thinkingConfig || null);
+    if (g.thinkingConfig?.thinkingLevel) return new Response(JSON.stringify({ error: { message: "Request contains an invalid argument." } }), { status: 400 });
+    return new Response(`data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: "أهلاً" }] } }] })}\n\n`); };
+  const t5 = await P.testProvider({ GEMINI_API_KEY: "g5" }, "gemini");
+  ok("Gemini: «think less» setting the model rejects → the other kind is used (no 400 error)", t5.ok && sent[0]?.thinkingLevel === "minimal" && sent[1]?.thinkingBudget === 0, sent); }
+// ٧) السرعة الفعلية: مزوّد بطيء بيتأخر ورا السريع في الأسئلة العادية
+{ P.resetCooldown(); P.noteLatency("gemini", 16000); P.noteLatency("gemini", 16000); P.noteLatency("groq", 600);
+  globalThis.fetch = async (u, o) => { u = String(u); if (u.endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "openai/gpt-oss-120b" }] }));
+    if (u.includes("generativelanguage") && u.includes("/models?")) return new Response(JSON.stringify({ models: [{ name: "models/gemini-flash-latest", supportedGenerationMethods: ["generateContent"] }] }));
+    if (u.includes("generativelanguage")) return new Response(`data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: "جيميني" }] } }] })}\n\n`);
+    return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: "سريع" } }] })}\n\n`); };
+  const e1 = await P.chatWithFallback({ GEMINI_API_KEY: "g6", GROQ_API_KEY: "q6", LLM_ORDER: "gemini,groq" }, { system: "ص".repeat(5000), msgs: [{ role: "user", content: "اشرحلي الدرس ده بالتفصيل من فضلك ".repeat(10) }], imgs: [], max: 50 });
+  ok("explain: Gemini measured slow (16s) → Groq answers first", e1.provider === "groq" && e1.task === "explain", { p: e1.provider, t: e1.task }); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

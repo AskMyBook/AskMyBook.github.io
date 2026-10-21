@@ -532,6 +532,7 @@ function providerStatus(env) {
       disabled: list(env.LLM_DISABLED).includes(id),
       okToday: s.ok,
       failToday: s.fail,
+      latency: s.lat || 0,
       resting: s.coolUntil > now ? Math.ceil((s.coolUntil - now) / 1e3) : 0,
       lastError: s.lastError,
       lastErrorAt: s.lastErrorAt,
@@ -661,13 +662,13 @@ var autoModelOf = (id, env) => {
   return p ? AUTO2.get(keyOf(p, env))?.model || "" : "";
 };
 var NOTHINK = /* @__PURE__ */ new Set();
-function thinkingFor(model, env = {}) {
-  if (env.GEMINI_THINKING === "default" || NOTHINK.has(model)) return null;
-  const m = String(model || "").toLowerCase();
-  if (/gemini-2\.5-pro/.test(m)) return { thinkingBudget: 128 };
-  if (/gemini-2\.5|flash-lite|flash-latest/.test(m)) return { thinkingBudget: 0 };
-  if (/gemini-[3-9]/.test(m)) return { thinkingLevel: /pro/.test(m) ? "low" : "minimal" };
-  return null;
+var THINK_OK = /* @__PURE__ */ new Map();
+function thinkingOptions(model, env = {}) {
+  if (env.GEMINI_THINKING === "default" || NOTHINK.has(model)) return [null];
+  const m = String(model || "").toLowerCase(), pro = /pro/.test(m);
+  const all = /gemini-2\.5/.test(m) ? [pro ? { thinkingBudget: 128 } : { thinkingBudget: 0 }, null] : /gemini-[3-9]/.test(m) ? [{ thinkingLevel: pro ? "low" : "minimal" }, { thinkingLevel: "low" }, null] : [{ thinkingLevel: pro ? "low" : "minimal" }, { thinkingBudget: pro ? 128 : 0 }, null];
+  const ok = THINK_OK.get(model);
+  return ok ? [ok, ...all.filter((x) => JSON.stringify(x) !== JSON.stringify(ok))] : all;
 }
 async function callOne(p, env, { system, msgs, imgs, max, temp, signal, model: mdl }) {
   const last = msgs.length - 1, model = mdl || p.model(env);
@@ -685,25 +686,26 @@ async function callOne(p, env, { system, msgs, imgs, max, temp, signal, model: m
       return j.type === "content_block_delta" ? j.delta?.text || "" : "";
     };
   } else if (p.kind === "gemini") {
-    const think = thinkingFor(model, env), gen = { maxOutputTokens: Math.round(max * 2.5), ...temp != null ? { temperature: temp } : {} };
+    const gen = { maxOutputTokens: Math.round(max * 2.5), ...temp != null ? { temperature: temp } : {} };
     const contents = msgs.map((x, i) => ({ role: x.role === "assistant" ? "model" : "user", parts: i === last && imgs.length ? [...imgs.map((d) => ({ inline_data: { mime_type: "image/jpeg", data: d } })), { text: x.content }] : [{ text: x.content }] }));
-    r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`, {
-      method: "POST",
-      signal,
-      headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: think ? { ...gen, thinkingConfig: think } : gen })
-    });
-    if (think && r.status === 400) {
-      const t = await r.clone().text().catch(() => "");
-      if (/thinking/i.test(t)) {
-        NOTHINK.add(model);
-        r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`, {
-          method: "POST",
-          signal,
-          headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
-          body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: gen })
-        });
+    const opts = thinkingOptions(model, env);
+    for (let k = 0; k < opts.length; k++) {
+      const think = opts[k];
+      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`, {
+        method: "POST",
+        signal,
+        headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: think ? { ...gen, thinkingConfig: think } : gen })
+      });
+      if (r.status === 400 && k < opts.length - 1) {
+        await r.text().catch(() => "");
+        continue;
       }
+      if (r.ok) {
+        if (think) THINK_OK.set(model, think);
+        else if (opts.length > 1) NOTHINK.add(model);
+      }
+      break;
     }
     pick = (j) => {
       if (j.error) throw new Error(j.error.message || "stream error");
@@ -784,9 +786,18 @@ function classifyTask({ msgs = [], system = "", imgs = [], purpose = "" } = {}) 
   if (ctx > 16e3) return "long";
   return "explain";
 }
+var SLOW_MS = 8e3;
+var noteLatency = (id, ms) => {
+  const s = statOf(id);
+  s.lat = s.lat ? Math.round(s.lat * 0.6 + ms * 0.4) : ms;
+};
 function routeOrder(env, cand, task) {
   if (String(env.SMART_ROUTING || "").toLowerCase() === "off" || !ROUTES[task]) return cand;
-  const head = ROUTES[task].filter((id) => cand.includes(id));
+  let head = ROUTES[task].filter((id) => cand.includes(id));
+  if (task !== "long") {
+    const fast = head.filter((id) => !(statOf(id).lat > SLOW_MS));
+    head = [...fast, ...head.filter((id) => !fast.includes(id))];
+  }
   return [...head, ...cand.filter((id) => !head.includes(id))];
 }
 async function chatWithFallback(env, req) {
@@ -803,14 +814,15 @@ async function chatWithFallback(env, req) {
     const p = byId[id];
     for (let attempt = 0; attempt < 3; attempt++) {
       const model = await modelFor2(p, env);
-      const ac = new AbortController(), ms = firstMs(env, p), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "SlowProvider" })), ms);
+      const tStart = Date.now(), ac = new AbortController(), ms = firstMs(env, p), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "SlowProvider" })), ms);
       const onAbort = () => ac.abort(req.signal.reason);
       req.signal?.addEventListener?.("abort", onAbort, { once: true });
       try {
         const { body, pick } = await callOne(p, env, { ...req, signal: ac.signal, model }), next = sseReader(body, pick);
-        const first = await next();
+        const t1 = Date.now(), first = await next();
         clearTimeout(timer);
         if (!first) throw fail(502, "\u0631\u062F \u0641\u0627\u0636\u064A");
+        noteLatency(id, Date.now() - t1 + (t1 - tStart));
         const s = statOf(id);
         s.ok++;
         s.lastUsed = Date.now();
@@ -853,7 +865,7 @@ async function testProvider(env, id) {
   const ms = Math.min(15e3, firstMs(env, p));
   let retried429 = false;
   for (let attempt = 0; attempt < 10 && Date.now() - t0 < 5e4; attempt++) {
-    const model = await modelFor2(p, env), ac = new AbortController(), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "TimeoutError" })), ms);
+    const model = await modelFor2(p, env), tA = Date.now(), ac = new AbortController(), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "TimeoutError" })), ms);
     try {
       const { body, pick } = await callOne(p, env, { system: "Reply in one short Arabic sentence.", msgs: [{ role: "user", content: "\u0642\u0648\u0644: \u0623\u0647\u0644\u0627\u064B\u060C \u0623\u0646\u0627 \u0634\u063A\u0627\u0644." }], imgs: [], max: 300, temp: 0, signal: ac.signal, model });
       const next = sseReader(body, pick);
@@ -879,6 +891,7 @@ async function testProvider(env, id) {
       }
       statOf(id).coolUntil = 0;
       statOf(id).model = model;
+      noteLatency(id, Date.now() - tA);
       const count = p.kind === "cfai" ? 0 : (MLIST.get(keyOf(p, env))?.list || []).filter((m) => !SKIP.test(m)).length;
       return { ok: true, reply: out.slice(0, 200), model, auto: !explicitModel(p, env), tried, count, ms: Date.now() - t0 };
     } catch (e) {
