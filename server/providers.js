@@ -19,7 +19,7 @@ export const CHAT_PROVIDERS = [
     configured: env => !!env.GEMINI_API_KEY, model: env => env.GEMINILITE_MODEL || "gemini-flash-lite-latest", defaultModel: "gemini-flash-lite-latest", vision: () => true },
   oa("groq", "Groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY", "openai/gpt-oss-120b", false, "https://console.groq.com/keys"),
   oa("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", "openrouter/free", true, "https://openrouter.ai/settings/keys", { "x-title": "Study Tutor" }),
-  oa("nvidia", "NVIDIA NIM", "https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY", "nvidia/nemotron-3-super-120b-a12b", false, "https://build.nvidia.com/settings/api-keys"),
+  oa("nvidia", "NVIDIA NIM", "https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY", "meta/llama-3.3-70b-instruct", false, "https://build.nvidia.com/settings/api-keys"),
   { id: "cloudflare", label: "Cloudflare Workers AI", keyName: "", link: "https://developers.cloudflare.com/workers-ai/", kind: "cfai",
     configured: env => !!env.AI?.run, model: env => env.CLOUDFLARE_MODEL || "@cf/meta/llama-3.3-70b-instruct-fp8-fast", defaultModel: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", vision: () => false },
   { id: "anthropic", label: "Anthropic Claude (مدفوع)", keyName: "ANTHROPIC_API_KEY", link: "https://console.anthropic.com/settings/keys", kind: "anthropic",
