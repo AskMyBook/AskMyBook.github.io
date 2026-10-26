@@ -118,7 +118,8 @@ async function renderPg(el) {
   if (el._done || el._busy) return; el._busy = true; const d = doc, n = +el.dataset.n;
   try {
     const pg = await d.getPage(n); if (!el.isConnected || !vis.has(el) || d !== doc) { el._busy = false; return; }
-    const v1 = pg.getViewport({ scale: 1 }); el._r = v1.height / v1.width; el.style.height = el.clientWidth * el._r + "px";
+    const v1 = pg.getViewport({ scale: 1 }), nr = v1.height / v1.width;
+    el._r = nr; el.style.height = el.clientWidth * nr + "px";   // المتصفح بيثبّت مكان القراءة لوحده (scroll anchoring) لما صفحة فوق تتغير
     let sc = el.clientWidth / v1.width * dprCap(); const px = v1.width * sc * v1.height * sc; if (px > 16e6) sc *= Math.sqrt(16e6 / px);
     const cv = el.firstChild, vp = pg.getViewport({ scale: sc }); cv.width = Math.floor(vp.width); cv.height = Math.floor(vp.height);
     el._task = pg.render({ canvasContext: cv.getContext("2d"), viewport: vp }); await el._task.promise; el._done = true; window.inkDraw?.(el);
@@ -127,18 +128,35 @@ async function renderPg(el) {
   el._busy = false;
 }
 function alignTo(n) { const w = $("wrap"), wr = w.getBoundingClientRect(), r = pageEl(n).getBoundingClientRect(); w.scrollTop += r.top - wr.top - 6; }
-function gotoPage(n) { if (!doc || !pgs.length) return; n = clamp(Math.floor(n) || 1, 1, doc.numPages); pending = n; alignTo(n); cur.page = n; $("pn").value = n; }
+function gotoPage(n) { if (!doc || !pgs.length) return; n = clamp(Math.floor(n) || 1, 1, doc.numPages); pending = n; cur.page = n; $("pn").value = n; keep = { page: n, f: 0 }; if (wrapHidden()) { wasHidden = true; return; } alignTo(n); }
 function showPage(n) { gotoPage(n); }
 function anchor() { const el = pageEl(cur.page); if (!el) return null; const w = $("wrap").getBoundingClientRect(), r = el.getBoundingClientRect(); return { el, f: (w.top - r.top) / (r.height || 1) }; }
 function setZoom(z) {
-  zoom = clamp(z, .5, 4); if (!pgs.length) return; const a = anchor(); clearPin(); sizePages();
+  zoom = clamp(z, .5, 4); if (!pgs.length) return;
+  if (wrapHidden()) { needResize = true; return; }   // الكتاب مستخبي (كراسة/فيديو/تاب الشات): مفيش قياسات صح دلوقتي، هنظبط لما يرجع
+  const a = anchor(); clearPin(); sizePages();
   if (a) { const w = $("wrap"), r = a.el.getBoundingClientRect(); w.scrollTop += r.top - w.getBoundingClientRect().top + a.f * r.height; }
   clearTimeout(ztimer); ztimer = setTimeout(() => { vis.forEach(el => { el._task?.cancel(); el._done = false; }); setTimeout(() => vis.forEach(renderPg), 60); }, 150);
 }
-$("wrap").addEventListener("scroll", () => { if (stf) return; stf = requestAnimationFrame(() => { stf = 0; if (!doc) return;
+// مكان القراءة: بيتحفظ وإنت ظاهر بس، ولما الكتاب يستخبى ويرجع (الكراسة/الفيديو/تاب الشات/تغيير المقاس) بيرجع لنفس الصفحة بالظبط
+const wrapHidden = () => !$("wrap").clientHeight || !$("wrap").clientWidth;
+let keep = null, wasHidden = false, needResize = false;
+const keepNow = () => { if (wrapHidden() || !pgs.length) return; const a = anchor(); if (a) keep = { page: cur.page, f: a.f }; };
+new ResizeObserver(() => {
+  if (!doc || !pgs.length) return;
+  if (wrapHidden()) { wasHidden = true; return; }
+  const w = $("wrap"), widthChanged = Math.abs(w.clientWidth - (w._lw || 0)) > 2; w._lw = w.clientWidth;
+  if (!wasHidden && !widthChanged && !needResize) return;
+  wasHidden = false; needResize = false; const k = keep || { page: cur.page, f: 0 };
+  sizePages(); const el = pageEl(k.page); if (!el) return;
+  cur.page = k.page; $("pn").value = k.page;
+  const r = el.getBoundingClientRect(); w.scrollTop += r.top - w.getBoundingClientRect().top + k.f * r.height;
+  clearTimeout(ztimer); ztimer = setTimeout(() => { vis.forEach(x => { x._task?.cancel(); x._done = false; }); setTimeout(() => vis.forEach(renderPg), 60); }, 150);
+}).observe($("wrap"));
+$("wrap").addEventListener("scroll", () => { if (stf) return; stf = requestAnimationFrame(() => { stf = 0; if (!doc || wrapHidden() || wasHidden) return;
   const wr = $("wrap").getBoundingClientRect(), line = wr.top + wr.height * .35; let best = 0;
   for (const el of vis) { const r = el.getBoundingClientRect(); if (r.top <= line && r.bottom > line) { best = +el.dataset.n; break; } }
-  if (best && best !== cur.page) { cur.page = best; $("pn").value = best; } }); }, { passive: true });
+  if (best && best !== cur.page) { cur.page = best; $("pn").value = best; } keepNow(); }); }, { passive: true });
 $("wrap").addEventListener("wheel", e => { if (!e.ctrlKey || !doc) return; e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1)); }, { passive: false });
 ["wheel", "touchstart", "pointerdown"].forEach(t => $("wrap").addEventListener(t, () => { pending = 0; }, { passive: true }));
 $("prev").onclick = () => showPage(cur.page - 1); $("next").onclick = () => showPage(cur.page + 1);
@@ -1363,7 +1381,7 @@ async function importMany(files) {
 }
 $("files").onchange = e => { importMany([...e.target.files]); e.target.value = ""; };
 $("addAll").onclick = () => $("files").click(); $("addAll2").onclick = () => $("files").click();
-const saveLast = () => { if (cur.id) localStorage.setItem("last", JSON.stringify({ id: cur.id, page: cur.page })); };
+const saveLast = () => { if (cur.id) localStorage.setItem("last", JSON.stringify({ id: cur.id, page: (wrapHidden() || wasHidden) && keep ? keep.page : cur.page })); };
 setInterval(saveLast, 2000); addEventListener("pagehide", saveLast);
 // كتب جاهزة مع الموقع (config.js ← seedBooks: [{file, url}]): بتتحمّل مرة واحدة أول ما الموقع يتفتح وتتحفظ في متصفح المستخدم زي أي كتاب.
 // لو المستخدم مسح كتاب منهم مبيرجعش لوحده (العلامة في localStorage "seeded"). لو التحميل فشل (نت ضعيف) بيحاول تاني المرة الجاية.
