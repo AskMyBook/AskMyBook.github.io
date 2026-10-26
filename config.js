@@ -8,8 +8,8 @@
 //   الـ anon key عام بطبيعته والحماية بـ RLS (server/supabase.sql). متحطش service_role key هنا أبدًا.
 window.TUTOR_CONFIG = Object.assign({
   proxyUrl: "https://study-tutor.asserzaher210.workers.dev",
-  supabaseUrl: "",
-  supabaseAnonKey: "",
+  supabaseUrl: "https://ichsrwxtybijharmeyrn.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImljaHNyd3h0eWJpamhhcm1leXJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwNDQ0NjQsImV4cCI6MjEwODYyMDQ2NH0.7bJBI895jdO53gMFYNNPFig1Q_KpITt8EEmwdLmYZT4",
   // maxPdfMB: أكبر كتاب يتحفظ على الجهاز (بالميجا). syncMaxPdfMB: أكبر كتاب يتزامن مع الحساب — لازم يساوي file_size_limit في
   // server/supabase.sql (50 ميجا، وده حد Supabase المجاني). الكتاب الأكبر من syncMaxPdfMB بيفضل على الجهاز بس ويتقال للمستخدم.
   maxPdfMB: 300,
