@@ -54,6 +54,7 @@ try {
     // annotations: highlight + note + edit + persistence + navigation
     const bioId = await page.evaluate(() => LIB.find(x => /biology/i.test(x.name))?.id); await page.evaluate(id => openBook(id, 1), bioId);
     await page.waitForFunction(() => document.querySelector('#pages .pg[data-n="1"] canvas')?.width > 0, null, { timeout: 15000 }).catch(() => {}); await sleep(400);
+    if (await page.$eval("#tools", e => getComputedStyle(e).display === "none")) await page.click("#inkToggle");   // الأدوات مستخبية لحد ما تدوس القلم
     await page.click('#tools [data-tool="hl"]');
     const bx = await page.$eval('#pages .pg[data-n="1"]', el => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
     await page.mouse.move(bx.x + bx.w * .2, bx.y + bx.h * .15); await page.mouse.down(); await page.mouse.move(bx.x + bx.w * .6, bx.y + bx.h * .15, { steps: 6 }); await page.mouse.up();
