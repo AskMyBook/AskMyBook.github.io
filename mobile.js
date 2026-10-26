@@ -7,8 +7,10 @@
   pen.type = "button"; pen.id = "inkToggle"; pen.className = "icon"; pen.title = "أدوات الكتابة"; pen.setAttribute("aria-label", "أدوات الكتابة"); pen.setAttribute("aria-expanded", "false");
   pen.innerHTML = '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
   $("bar").insertBefore(pen, $("solve"));
-  const setTools = open => { document.body.classList.toggle("tools-open", open); pen.setAttribute("aria-expanded", String(open)); pen.classList.toggle("on", open); };
+  const setTools = open => { document.body.classList.toggle("tools-open", open); pen.setAttribute("aria-expanded", String(open)); pen.classList.toggle("on", open); try { localStorage.setItem("toolsOpen", open ? "1" : "0"); } catch {} };
   pen.onclick = () => setTools(!document.body.classList.contains("tools-open"));
+  // الأدوات مستخبية لحد ما تفتحها (وبيفتكر اختيارك)
+  try { if (localStorage.getItem("toolsOpen") === "1" && !mob()) setTools(true); } catch {}
 
   // «إضافة كتب» بتتنقل لقايمة ⋮ على الموبايل عشان الشريط يساع
   const mm = $("moreMenu");
