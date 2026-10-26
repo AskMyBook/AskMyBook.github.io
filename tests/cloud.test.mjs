@@ -87,6 +87,7 @@ async function device(tag, cfg = true) {
   const ctx = await b.newContext(); await ctx.exposeFunction("__sb", sb);
   await ctx.route(/fonts\.(googleapis|gstatic)\.com|huggingface\.co|cdnjs\.cloudflare\.com|generativelanguage|llm7|kepler|kilo|js\.puter\.com/, r => r.fulfill({ status: 404, body: "" }));
   await ctx.route(/supabase-js/, r => r.fulfill({ status: 200, headers: { "content-type": "text/javascript" }, body: STUB }));
+  if (!cfg) await ctx.route(/\/config\.js/, async r => { const res = await r.fetch(); r.fulfill({ response: res, body: (await res.text()).replace(/supabaseUrl: "[^"]*"/, 'supabaseUrl: ""').replace(/supabaseAnonKey: "[^"]*"/, 'supabaseAnonKey: ""') }); });   // الموقع الحقيقي متظبط؛ هنا بنجرّب حالة «من غير إعداد»
   if (cfg) await ctx.addInitScript(() => { window.TUTOR_CONFIG = { supabaseUrl: "https://demo.supabase.co", supabaseAnonKey: "anon-public-key" }; });
   const page = await ctx.newPage(); page.on("pageerror", e => errs.push(tag + ": " + e.message)); page.on("dialog", d => d.accept());
   await page.goto(`http://127.0.0.1:${port}/`); await sleep(900); return { ctx, page };
