@@ -207,7 +207,7 @@ const latinQs = qs => localStorage.getItem("uiLang") === "en" || (qs || []).filt
       const blocks = await examBlocks(cfg.id, cfg.secs, provider() === "free" ? 7000 : 14000);
       if (!blocks.length) throw new Error("مقدرتش أقرا نص من الجزء ده. لو الكتاب صور، دوس «ذاكر الكتاب كله» الأول عشان يتقري.");
       const sample = blocks.map(b => b.text).join(" "), arN = (sample.match(/[؀-ۿ]/g) || []).length, enN = (sample.match(/[A-Za-z]/g) || []).length;
-      const lang = enN > arN * 1.5 ? "English" : "عربي", enUI = localStorage.getItem("uiLang") === "en", exLang = lang === "English" || enUI ? "English" : "عربي";
+      const lang = enN > arN * 1.5 ? "English" : "عربي", enUI = localStorage.getItem("uiLang") === "en", exLang = enUI ? "English" : "عربي بلهجة الطالب (المصطلحات بالإنجليزي)";
       const dd = { easy: "سهلة ومباشرة", medium: "متوسطة: فهم وتطبيق", hard: "صعبة: تطبيق وتحليل وربط بين الأفكار، والاختيارات الغلط قريبة جدًا", vhard: "صعبة جدًا: مسائل ومواقف جديدة محتاجة تفكير عميق وربط أكتر من فكرة، من غير أسئلة حفظ" }[cfg.diff];
       const spec = `اعمل امتحان فيه ${cfg.count} سؤال بالظبط من المقاطع دي بس (مش من برّه)، موزّعين على كل المقاطع، والصعوبة ${dd}.
 الأنواع المسموحة بس: ${cfg.types.map(t => t + " (" + TYPES[t] + ")").join("، ")} — ونوّع بينهم.

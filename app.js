@@ -95,6 +95,7 @@ async function openBook(id, page = 1) {
     doc = d; cur.id = id;
   }
   if (cur.mounted === id && pgs.length && !$("pages").hidden) gotoPage(page); else await mountDoc(page);
+  detectBookLang(id, page).catch(() => {});
 }
 
 let pgs = [], vis = new Set(), io = null, pending = 0, ztimer = 0, stf = 0;
@@ -549,6 +550,16 @@ async function ocrPage(id, n, d = null) {
     const w = await ocrW[lang], r = await w.recognize(await snap(null, n, 2000, d));
     return r.data.text || "";
   } catch (e) { console.warn("OCR", e); return ""; }
+}
+// لغة الكتاب (من نص الصفحات من غير OCR): الكتاب الإنجليزي بيتحل بالإنجليزي ويتشرح بلهجة الطالب
+window.BOOK_LANG = {};
+const langOfText = s => { const ar = (s.match(/[\u0600-\u06FF]/g) || []).length, en = (s.match(/[A-Za-z]/g) || []).length; return ar + en < 40 ? "" : en > ar * 1.5 ? "en" : "ar"; };
+async function detectBookLang(id, around) {
+  if (!id || BOOK_LANG[id]) return BOOK_LANG[id] || "";
+  const d = docs[id] || (cur.id === id ? doc : null), b = BK[id], n = d?.numPages || b?.n || 0; let s = "";
+  const want = [...new Set([around, 1, 2, 3, 5, 8, 13, 21, 34].filter(p => p && p <= n))];
+  for (const p of want) { let t = b?.t?.[p - 1] || ""; if (!t && d) { try { t = (await (await d.getPage(p)).getTextContent()).items.map(i => i.str).join(" "); } catch {} } s += " " + t; if (s.length > 6000) break; }
+  const l = langOfText(s); if (l) BOOK_LANG[id] = l; return l;
 }
 async function pageText(id, n) {
   const k = id + "|" + n; if (ptCache.has(k)) return ptCache.get(k);
@@ -1139,6 +1150,7 @@ async function aiSel(kind, flat, img) {
 async function quickSel(spec, kind) {
   if (!doc || busy) return; busy = true; const n = spec.n; let wait;
   try {
+    await detectBookLang(cur.id, n).catch(() => {});
     const img = await snap(spec, n); if (innerWidth <= 800) showTab("chat");
     add("u", `${QL[kind]} — صفحة ${n}`, null, img); wait = add("a", "بفكر..."); wait.classList.add("typing"); clearPin();
     // الذكي بيشوف الصور (سيرفر الموقع): لو الكتاب صور ومفيهوش نص، الصورة نفسها بتروح للذكي بدل OCR البطيء في المتصفح
@@ -1181,6 +1193,7 @@ async function askSpec(spec) {
   else if (spec.type === "band") { label = `✨ سؤال من صفحة ${n}`; prompt = `دي صفحة ${n} من كتاب ${name}. السطر المظلل بالأصفر جزء من سؤال. حل السؤال ده كامل (بما فيه اختياراته) واشرح الإجابة.`; }
   else { label = `✨ الجزء المحدد من صفحة ${n}`; prompt = `ده جزء مقصوص من صفحة ${n} في كتاب ${name}. حل الأسئلة الظاهرة فيه واشرح.`; }
   try {
+    await detectBookLang(cur.id, n).catch(() => {});
     const img = await snap(spec, n); if (innerWidth <= 800) showTab("chat");
     add("u", label, null, img); wait = add("a", "بفكر..."); wait.classList.add("typing"); clearPin();
     const vp = visProv(), loc = vp === null, bc = loc && spec?.type === "band" ? await bandContext(spec, n) : null, t = bc ? bc.t : loc ? (spec ? await regionText(spec, n, img) : await pageText(cur.id, n)) : "";
