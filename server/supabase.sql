@@ -23,8 +23,9 @@ create policy "own rows: delete" on public.user_kv for delete to authenticated u
 
 -- 2) ملفات الكتب (PDF): bucket خاص (مش public)، وكل مستخدم في فولدر باسم الـ id بتاعه: <user_id>/<book_id>.pdf
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('books', 'books', false, 52428800, array['application/pdf'])
-on conflict (id) do update set public = false, file_size_limit = 52428800, allowed_mime_types = array['application/pdf'];
+-- الكتب الأكبر من 45 ميجا بتترفع أجزاء (octet-stream)، وفهرس كل كتاب (النص المقري، مضغوط gzip) بيترفع جنبه: <user_id>/<book_id>.idx
+values ('books', 'books', false, 52428800, array['application/pdf', 'application/octet-stream'])
+on conflict (id) do update set public = false, file_size_limit = 52428800, allowed_mime_types = array['application/pdf', 'application/octet-stream'];
 
 drop policy if exists "books: read own" on storage.objects;
 drop policy if exists "books: add own" on storage.objects;

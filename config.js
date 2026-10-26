@@ -10,10 +10,10 @@ window.TUTOR_CONFIG = Object.assign({
   proxyUrl: "https://study-tutor.asserzaher210.workers.dev",
   supabaseUrl: "https://ichsrwxtybijharmeyrn.supabase.co",
   supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImljaHNyd3h0eWJpamhhcm1leXJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwNDQ0NjQsImV4cCI6MjEwODYyMDQ2NH0.7bJBI895jdO53gMFYNNPFig1Q_KpITt8EEmwdLmYZT4",
-  // maxPdfMB: أكبر كتاب يتحفظ على الجهاز (بالميجا). syncMaxPdfMB: أكبر كتاب يتزامن مع الحساب — لازم يساوي file_size_limit في
-  // server/supabase.sql (50 ميجا، وده حد Supabase المجاني). الكتاب الأكبر من syncMaxPdfMB بيفضل على الجهاز بس ويتقال للمستخدم.
+  // maxPdfMB: أكبر كتاب يتحفظ على الجهاز (بالميجا). syncMaxPdfMB: أكبر كتاب يتزامن مع الحساب. الكتاب الأكبر من 45 ميجا بيترفع أجزاء
+  // (حد Supabase المجاني 50 ميجا للملف الواحد)، والمساحة كلها في الخطة المجانية 1 جيجا. الأكبر من syncMaxPdfMB بيفضل على الجهاز بس.
   maxPdfMB: 300,
-  syncMaxPdfMB: 50,
+  syncMaxPdfMB: 300,
   // true = إظهار الإعدادات التقنية للجميع (مفاتيح API، الذكاء المحلي، البحث بالمعنى، تفاصيل الصوت). سيبها false لموقع الطلبة.
   devSettings: false,
   // كتب جاهزة بتتحمّل أول مرة (المثال في README ← «نسخة بكتب جاهزة»): seedBooks: [{ file: "اسم_الكتاب.pdf", url: "books/اسم_الكتاب.pdf" }]

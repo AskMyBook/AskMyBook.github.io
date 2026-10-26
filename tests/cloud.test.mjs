@@ -148,13 +148,26 @@ try {
   ok("a deletion made offline survives a page reload and is uploaded later (not resurrected from the cloud)", !(DBS.kv.get(uidA) || new Map()).has("plan:zz") && !(await A.page.evaluate(() => idbGet("plan:zz"))), [...(DBS.kv.get(uidA) || new Map()).keys()]);
   await A.page.evaluate(() => { $("settings").hidden = true; });
 
-  // ===== كتاب أكبر من حد المزامنة (50): بيفضل على الجهاز، ومايترفعش، ومفيش خطأ مزامنة =====
+  // ===== كتاب أكبر من 45 ميجا: بيترفع أجزاء ويتنزّل كامل على الجهاز التاني =====
   { const src = readFileSync(path.join(FX, "newton.pdf")), nl = src.indexOf(10) + 1, mid = Buffer.alloc(51 * 1048576, 120); mid[0] = 37; mid[mid.length - 1] = 10;
     const bp = path.join(os.tmpdir(), "bigsync-" + process.pid + ".pdf"); writeFileSync(bp, Buffer.concat([src.subarray(0, nl), mid, src.subarray(nl)]));
-    await A.page.setInputFiles("#files", bp); await sleep(4500); rmSync(bp, { force: true });
-    const big = await A.page.evaluate(() => { const e = LIB.find(x => x.size > 50 * 1048576); return e ? { id: e.id, st: CLOUD.state, err: CLOUD.err, toast: document.getElementById("ttoast")?.textContent || "" } : null; });
-    ok("a book over the 50 MB sync limit stays on the device (not uploaded), sync keeps working, and the user is told", !!big && !DBS.files.has(`${uidA}/${big.id}.pdf`) && big.st !== "error" && /حد المزامنة|مش هيتزامن|الجهاز ده بس/.test(big.toast + (await A.page.evaluate(() => $("vmsg").innerText))), big);
-    if (big) { await A.page.evaluate(id => delBook(id), big.id); await sleep(2500); } }
+    await A.page.setInputFiles("#files", bp); await sleep(9000); rmSync(bp, { force: true });
+    const big = await A.page.evaluate(() => { const e = LIB.find(x => x.size > 50 * 1048576); return e ? { id: e.id, size: e.size, st: CLOUD.state, err: CLOUD.err } : null; });
+    ok("a book over 45 MB is uploaded in parts (Supabase free limit is 50 MB per file), sync keeps working", !!big && DBS.files.has(`${uidA}/${big.id}.pdf.p0`) && DBS.files.has(`${uidA}/${big.id}.pdf.p1`) && DBS.files.has(`${uidA}/${big.id}.pdf.n2`) && !DBS.files.has(`${uidA}/${big.id}.pdf`) && big.st !== "error", big);
+    if (big) { await B.page.evaluate(() => CLOUD.sync()); await sleep(9000);
+      const got = await B.page.evaluate(async id => { const f = await idbGet(id); return f ? f.size : 0; }, big.id);
+      ok("the other device downloads the parts and gets the whole book back (same size)", got === big.size, { got, want: big.size });
+      await A.page.evaluate(id => delBook(id), big.id); await sleep(2500);
+      ok("deleting the big book removes all its parts from the cloud", ![...DBS.files.keys()].some(k => k.includes(big.id + ".pdf")), [...DBS.files.keys()].filter(k => k.includes(big.id))); } }
+
+  // ===== فهرس الكتاب (اللي اتقرا) بيتزامن: الجهاز التاني مايذاكرش الكتاب من الأول =====
+  { const id = await A.page.evaluate(async () => { for (const e of LIB) { const v = await idbGet("idx:" + e.id); if (v?.s?.some(Boolean)) return e.id; } return ""; });
+    if (id) { await A.page.evaluate(id => CLOUD.upIdx(id), id); await sleep(1200);
+      const ah = await A.page.evaluate(async id => (await idbGet("idx:" + id)).s.filter(Boolean).length, id);
+      await B.page.evaluate(async id => { await idbDel("idx:" + id); delete BK[id]; }, id); await B.page.evaluate(() => CLOUD.sync()); await sleep(4000);
+      const bh = await B.page.evaluate(async id => { const v = await idbGet("idx:" + id); return v?.s ? v.s.filter(Boolean).length : 0; }, id);
+      ok("the book's read index syncs: the other device gets the pages already read (no re-reading)", DBS.files.has(`${uidA}/${id}.idx`) && bh === ah && ah > 0, { ah, bh }); }
+    else ok("the book's read index syncs (needs a read book)", false, "no indexed book on device A"); }
 
   // ===== أوفلاين + تعارض: الجهازين عدّلوا في نفس الوقت → الاتنين يتحفظوا (مفيش حاجة بتضيع) =====
   await B.page.evaluate(() => { $("settings").hidden = true; });

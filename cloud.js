@@ -5,7 +5,7 @@
 // كل مستخدم بيشوف ملفاته هو بس، ومحدش يقدر يوصل لكتب حد تاني حتى لو عرف اسم الملف.
 (() => {
   const C = { sb: null, user: null, session: null, cfg: null, state: "off", last: +localStorage.getItem("cloud.last") || 0, err: "", busy: false };
-  const KEYRE = /^(lib|notes|exams|settings|deleted|nb)$|^(ann_|prog:|weak:|plan:|vids:)/;
+  const KEYRE = /^(lib|notes|exams|settings|deleted|nb|idxmeta)$|^(ann_|prog:|weak:|plan:|vids:)/;
   // الإعدادات اللي بتتزامن (مش أي مفتاح API — مفاتيح المستخدم BYOK بتفضل على جهازه بس)
   const SET_KEYS = ["provider", "pmodel", "srclock", "embmode", "theme", "uiLang", "dialect", "dialectAr", "miclang", "autospeak", "lsize", "tts.settings"];
   const SDK = ["https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js", "https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"];
@@ -23,6 +23,7 @@
     if (k === "exams") return byId(a, b, "date").sort((x, y) => x.date - y.date).slice(-50);
     if (k.startsWith("ann_")) { const o = { ...(b || {}) }; for (const [p, items] of Object.entries(a || {})) { const seen = new Set((o[p] || []).map(x => JSON.stringify(x))); o[p] = [...(o[p] || []), ...items.filter(x => !seen.has(JSON.stringify(x)))]; } return o; }
     if (k.startsWith("prog:")) return { ...b, ...a, seen: [...new Set([...(a?.seen || []), ...(b?.seen || [])])].sort((x, y) => x - y), last: (a?.t || 0) >= (b?.t || 0) ? a?.last : b?.last, t: Math.max(a?.t || 0, b?.t || 0) };
+    if (k === "idxmeta") { const o = { ...(b || {}) }; for (const [id, x] of Object.entries(a || {})) if (!o[id] || (x?.have || 0) > (o[id].have || 0)) o[id] = x; return o; }   // الفهرس اللي اتقرا منه صفحات أكتر يكسب
     if (k === "settings") return ta >= tb ? { ...(b || {}), ...(a || {}) } : { ...(a || {}), ...(b || {}) };
     return ta > tb ? a : b;   // الباقي (خطط / نقط ضعف): الأحدث فعلًا (قبل كده كانت السحابة بتكسب دايمًا حتى لو المحلي أحدث)
   }
@@ -30,7 +31,7 @@
 
   // ----- كل تغيير محلي في بيانات المذاكرة بيتسجّل عشان يترفع -----
   const rawSet = window.idbSet, rawDel = window.idbDel, dirty = new Set(); let pushT = 0;
-  window.idbSet = async (k, v) => { const r = await rawSet(k, v); if (r !== false && typeof k === "string" && KEYRE.test(k)) { meta[k] = Date.now(); gone.delete(k); saveMeta(); mark(k); } return r; };
+  window.idbSet = async (k, v) => { const r = await rawSet(k, v); if (r !== false && typeof k === "string" && k.startsWith("idx:")) scheduleIdx(k.slice(4)); if (r !== false && typeof k === "string" && KEYRE.test(k)) { meta[k] = Date.now(); gone.delete(k); saveMeta(); mark(k); } return r; };
   window.idbDel = async k => { const r = await rawDel(k); if (typeof k === "string" && KEYRE.test(k)) { delete meta[k]; dirty.delete(k); gone.add(k); saveMeta(); mark(k); } return r; };
   function mark(k) { if (!C.user) return; dirty.add(k); clearTimeout(pushT); pushT = setTimeout(push, 1500); }
 
@@ -76,15 +77,41 @@
   const fail = e => { C.err = String(e?.message || e).slice(0, 160); C.state = "error"; ui(); };
 
   // ----- ملفات الكتب -----
-  const path = id => `${C.user.id}/${id}.pdf`, tooBig = new Set();
+  // الكتاب لحد 45 ميجا بيترفع ملف واحد. الأكبر بيتقسم أجزاء (حد Supabase المجاني 50 ميجا للملف) وبيتجمّع تاني وقت التنزيل.
+  const PART = 45 * 1048576, path = id => `${C.user.id}/${id}.pdf`, tooBig = new Set();
+  const partsOf = (have, id) => { for (const n of have) { const m = n.match(/^(.+)\.pdf\.n(\d+)$/); if (m && m[1] === id) return +m[2]; } return 0; };
+  const onCloud = (have, id) => have.has(id + ".pdf") || partsOf(have, id) > 0;
   async function upBook(id) {
     const f = await idbGet(id); if (!f) return;
-    const lim = window.SYNC_MAX_MB || 50;   // نفس حد الـ bucket في supabase.sql
+    const lim = window.SYNC_MAX_MB || 300;
     if (f.size > lim * 1048576) { if (!tooBig.has(id)) { tooBig.add(id); toast(T("ℹ️ كتاب أكبر من حد المزامنة") + ` (${lim} MB) — ` + T("هيفضل على الجهاز ده بس.")); } return; }   // مرة واحدة لكل كتاب (مش كل مزامنة)
-    const { error } = await C.sb.storage.from("books").upload(path(id), f, { upsert: true, contentType: "application/pdf" }); if (error) throw error;
+    const st = C.sb.storage.from("books");
+    if (f.size <= PART) { const { error } = await st.upload(path(id), f, { upsert: true, contentType: "application/pdf" }); if (error) throw error; return; }
+    const n = Math.ceil(f.size / PART);
+    for (let i = 0; i < n; i++) { ui(T("بيرفع «") + (NAMES[id] || id) + `» (${i + 1}/${n})…`); const { error } = await st.upload(`${path(id)}.p${i}`, f.slice(i * PART, (i + 1) * PART), { upsert: true, contentType: "application/octet-stream" }); if (error) throw error; }
+    const { error } = await st.upload(`${path(id)}.n${n}`, new Blob([String(n)]), { upsert: true, contentType: "application/octet-stream" }); if (error) throw error;   // علامة إن كل الأجزاء اترفعت
+  }
+  async function downBook(id, have) {
+    const st = C.sb.storage.from("books"), n = partsOf(have, id);
+    if (!n) { const { data, error } = await st.download(path(id)); if (error) throw error; return data; }
+    const parts = []; for (let i = 0; i < n; i++) { ui(T("بنزّل «") + (NAMES[id] || id) + `» (${i + 1}/${n})…`); const { data, error } = await st.download(`${path(id)}.p${i}`); if (error) throw error; parts.push(data); }
+    return new Blob(parts, { type: "application/pdf" });
+  }
+
+  // ----- فهرس الكتاب (النص اللي اتقرا من كل صفحة، وفيه شغل الـ OCR البطيء) بيتزامن كمان، عشان الجهاز التاني مايذاكرش الكتاب من الأول -----
+  const IDXP = id => `${C.user.id}/${id}.idx`, haveOf = v => (v?.s || []).filter(Boolean).length, idxT = {};
+  const gz = async o => new Response(new Blob([JSON.stringify(o)]).stream().pipeThrough(new CompressionStream("gzip"))).blob();
+  const ungz = async b => JSON.parse(await new Response(b.stream().pipeThrough(new DecompressionStream("gzip"))).text());
+  function scheduleIdx(id) { if (!C.user || typeof CompressionStream === "undefined") return; clearTimeout(idxT[id]); idxT[id] = setTimeout(() => upIdx(id).catch(fail), 15000); }
+  C.upIdx = id => upIdx(id);
+  async function upIdx(id) {
+    const v = await idbGet("idx:" + id), h = haveOf(v); if (!h || !LIB.some(e => e.id === id)) return;
+    const m = (await idbGet("idxmeta")) || {}; if (m[id]?.up && (m[id].have || 0) >= h) return;
+    const { error } = await C.sb.storage.from("books").upload(IDXP(id), await gz(v), { upsert: true, contentType: "application/octet-stream" }); if (error) throw error;
+    m[id] = { have: h, n: v.n, up: 1, t: Date.now() }; await window.idbSet("idxmeta", m);
   }
   window.addEventListener("books-imported", async e => { if (!C.user) return; try { for (const id of e.detail.ids) await upBook(id); done(); } catch (err) { fail(err); } });
-  window.addEventListener("book-deleted", async e => { if (!C.user) return; try { await C.sb.storage.from("books").remove([path(e.detail.id)]); } catch (err) { fail(err); } });
+  window.addEventListener("book-deleted", async e => { if (!C.user) return; try { const id = e.detail.id, { data: fs } = await C.sb.storage.from("books").list(C.user.id, { limit: 1000 }); const names = (fs || []).map(f => f.name).filter(n => n.startsWith(id + ".")); if (names.length) await C.sb.storage.from("books").remove(names.map(n => `${C.user.id}/${n}`)); } catch (err) { fail(err); } });
 
   // ----- مزامنة كاملة: الأحدث يكسب لكل بيانة، والمكتبة بتتدمج (مفيش كتاب بيضيع) -----
   C.sync = async () => {
@@ -117,15 +144,21 @@
       const have = new Set((files || []).map(f => f.name));
       for (const e of lib) {
         const local = await idbGet(e.id);
-        if (!local && have.has(e.id + ".pdf")) { C.state = "sync"; ui(T("بنزّل «") + e.name + "»…"); const { data: blob, error: e4 } = await C.sb.storage.from("books").download(path(e.id)); if (e4) throw e4; await rawSet(e.id, blob); changed.add("book:" + e.id); }
-        else if (local && !have.has(e.id + ".pdf") && C.upload !== false) await upBook(e.id);
+        if (!local && onCloud(have, e.id)) { C.state = "sync"; ui(T("بنزّل «") + e.name + "»…"); await rawSet(e.id, await downBook(e.id, have)); changed.add("book:" + e.id); }
+        else if (local && !onCloud(have, e.id) && C.upload !== false) await upBook(e.id);
       }
+      // الفهرس: لو اللي في الحساب مقري منه صفحات أكتر من اللي هنا ننزّله، ولو العكس نرفع اللي هنا
+      if (typeof DecompressionStream !== "undefined") { const im = (await idbGet("idxmeta")) || {};
+        for (const e of lib) { const lv = await idbGet("idx:" + e.id), lh = haveOf(lv), r = im[e.id];
+          if (r?.up && (r.have || 0) > lh && have.has(e.id + ".idx")) { try { const { data: b, error: e5 } = await C.sb.storage.from("books").download(IDXP(e.id)); if (e5) throw e5; const v = await ungz(b); if (Array.isArray(v?.t) && haveOf(v) > lh) { await rawSet("idx:" + e.id, v); delete BK[e.id]; changed.add("idx:" + e.id); } } catch (err) { console.warn("idx down", err); } }
+          else if (lh && (!r?.up || lh > (r.have || 0)) && C.upload !== false) await upIdx(e.id).catch(err => console.warn("idx up", err)); } }
       C.busy = false; await push(); done();
       if (changed.size) apply(changed);
     } catch (e) { C.busy = false; fail(e); }
   };
   async function apply(changed) {   // البيانات الجديدة تظهر على طول من غير تحديث للصفحة
     if (changed.has("lib") || [...changed].some(k => k.startsWith("book:"))) { LIB = (await idbGet("lib")) || []; syncNames(); renderLib(); if (!doc && LIB.length) openBook(LIB[0].id, 1); }
+    if ([...changed].some(k => k.startsWith("idx:"))) { try { await bkPreload(); if (cur.id && changed.has("idx:" + cur.id) && doc) { await bkLoadFor(cur.id, doc); bkInit?.(); } } catch {} }
     if (cur.id && changed.has("ann_" + cur.id)) window.inkLoad?.(cur.id);
     window.dispatchEvent(new CustomEvent("cloud-synced", { detail: { keys: [...changed] } }));
     if (!$("hub")?.hidden) window.STUDY?.open();
