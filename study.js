@@ -5,7 +5,8 @@
   const S = {}, I = b => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${b}</svg>`;
   const nm = id => NAMES[id] || LIB.find(e => e.id === id)?.name || "";
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  const dfmt = t => new Date(t).toLocaleDateString("ar-EG", { day: "numeric", month: "short", year: "numeric" });
+  const LOC = () => localStorage.getItem("uiLang") === "en" ? "en-GB" : "ar-EG";
+  const dfmt = t => new Date(t).toLocaleDateString(LOC(), { day: "numeric", month: "short", year: "numeric" });
   const bookSel = (sel = "") => LIB.map(e => `<option value="${esc(e.id)}"${e.id === sel ? " selected" : ""}>${esc(e.name)}</option>`).join("");
   const curBook = () => cur.id || $("book")?.value || LIB[0]?.id || "";
   const jsonOf = s => (window.TUTOR?.parseJSON ? TUTOR.parseJSON(s) : null);
@@ -149,6 +150,8 @@
 
   // ================= ٣) الامتحانات =================
   const EX = { cfg: null, qs: [], ans: [], timer: 0, end: 0, done: false, res: null };
+const latinQs = qs => localStorage.getItem("uiLang") === "en" || (qs || []).filter(x => /[A-Za-z]/.test(x.q || "") && !/[؀-ۿ]/.test(x.q || "")).length * 2 > (qs || []).length;
+  const LETS = qs => latinQs(qs) ? ["A", "B", "C", "D", "E", "F"] : ["أ", "ب", "ج", "د", "هـ", "و"];
   const DIFF = { easy: "سهل", medium: "متوسط", hard: "صعب", vhard: "صعب جدًا" };
   const TYPES = { mcq: "اختيار من متعدد", tf: "صح وغلط", fill: "أكمل الفراغ", short: "إجابة قصيرة", essay: "مقالي", math: "مسائل" };
   function sections(id) {   // الفصول/الدروس من فهرس الكتاب، وإلا مجموعات كل ١٠ صفحات
@@ -203,7 +206,8 @@
     try {
       const blocks = await examBlocks(cfg.id, cfg.secs, provider() === "free" ? 7000 : 14000);
       if (!blocks.length) throw new Error("مقدرتش أقرا نص من الجزء ده. لو الكتاب صور، دوس «ذاكر الكتاب كله» الأول عشان يتقري.");
-      const lang = /[؀-ۿ]/.test(blocks.map(b => b.text).join(" ").slice(0, 2000)) ? "عربي" : "English";
+      const sample = blocks.map(b => b.text).join(" "), arN = (sample.match(/[؀-ۿ]/g) || []).length, enN = (sample.match(/[A-Za-z]/g) || []).length;
+      const lang = enN > arN * 1.5 ? "English" : "عربي", enUI = localStorage.getItem("uiLang") === "en", exLang = lang === "English" || enUI ? "English" : "عربي";
       const dd = { easy: "سهلة ومباشرة", medium: "متوسطة: فهم وتطبيق", hard: "صعبة: تطبيق وتحليل وربط بين الأفكار، والاختيارات الغلط قريبة جدًا", vhard: "صعبة جدًا: مسائل ومواقف جديدة محتاجة تفكير عميق وربط أكتر من فكرة، من غير أسئلة حفظ" }[cfg.diff];
       const spec = `اعمل امتحان فيه ${cfg.count} سؤال بالظبط من المقاطع دي بس (مش من برّه)، موزّعين على كل المقاطع، والصعوبة ${dd}.
 الأنواع المسموحة بس: ${cfg.types.map(t => t + " (" + TYPES[t] + ")").join("، ")} — ونوّع بينهم.
@@ -211,7 +215,8 @@
 {"questions":[{"type":"mcq","q":"...","options":["...","...","...","..."],"answer":0,"explain":"ليه دي الإجابة","src":1}]}
 - mcq: ٤ اختيارات و answer = رقم الصح (من 0). tf: options=${lang === "عربي" ? '["صح","غلط"]' : '["True","False"]'} و answer رقم.
 - fill: جملة من الكتاب فيها ____ مكان الكلمة، و answer = الكلمة. short/essay/math: من غير options و answer = الإجابة النموذجية (للمسائل: الخطوات والناتج بالوحدة).
-- src = رقم المقطع اللي السؤال جاي منه. الأسئلة بلغة الكتاب (${lang}).`;
+- src = رقم المقطع اللي السؤال جاي منه. الأسئلة بلغة الكتاب (${lang}).
+- اكتب كل حاجة في السؤال (q و options و answer) بالـ ${lang}${lang === "English" ? " (English only — no Arabic at all)" : ""}، والشرح (explain) بالـ ${exLang}.`;
       // الأسئلة بيانات منظّمة: schema + تحقق إن كل سؤال جاي من مقطع حقيقي من الجزء المختار + إعادة محاولة لو الرد باظ
       const r = await AI.structured({ tier: "smart", max: Math.min(6000, 450 * cfg.count + 800), temperature: 0.5,
         system: "إنت مدرّس بيعمل امتحانات دقيقة من كتاب الطالب بس. متخترعش معلومات مش في المقاطع. رجّع JSON صحيح بس.",
@@ -228,7 +233,7 @@
   function tick() { const left = EX.end - Date.now(), el = $("eTimer"); if (el) { const m = Math.max(0, Math.floor(left / 60000)), s = Math.max(0, Math.floor(left / 1000) % 60); el.textContent = `⏱ ${m}:${String(s).padStart(2, "0")}`; el.classList.toggle("low", left < 60000); }
     if (left <= 0) { clearInterval(EX.timer); if (!EX.done) { toast("⏱ الوقت خلص — بصحح الامتحان."); submitExam(); } } }
   function rTake() {
-    const L = ["أ", "ب", "ج", "د", "هـ", "و"];
+    const L = LETS(EX.qs);
     body().innerHTML = `<div class="hrow"><h2>🧪 امتحان — ${esc(nm(EX.cfg.id))} (${EX.qs.length} سؤال · ${DIFF[EX.cfg.diff]})</h2>${EX.end ? `<b id="eTimer" class="timer"></b>` : ""}</div>
       <ol class="exq">${EX.qs.map((x, i) => `<li data-i="${i}"><div class="qq">${md(x.q)} <small class="qt">${TYPES[x.type]}</small></div>${x.options ? `<div class="qo">${x.options.map((o, k) => `<label class="opt"><input type="radio" name="q${i}" value="${k}"${EX.ans[i] === k ? " checked" : ""}> <b>${L[k] || k + 1}</b> ${esc(o)}</label>`).join("")}</div>`
         : `<textarea rows="${x.type === "essay" || x.type === "math" ? 4 : 2}" placeholder="${x.type === "math" ? "اكتب الخطوات والناتج" : "إجابتك"}">${esc(EX.ans[i] || "")}</textarea>`}</li>`).join("")}</ol>
@@ -266,7 +271,7 @@
     if (hub.hidden) S.open("exam"); else rReport();
   }
   function rReport() {
-    const X = EX.res, L = ["أ", "ب", "ج", "د", "هـ", "و"], ans = r => r.x.options ? (r.a == null ? "—" : (L[r.a] || "") + " " + r.x.options[r.a]) : (r.a || "—");
+    const X = EX.res, L = LETS(EX.qs), ans = r => r.x.options ? (r.a == null ? "—" : (L[r.a] || "") + " " + r.x.options[r.a]) : (r.a || "—");
     const right = r => r.x.options ? (L[r.x.answer] || "") + " " + r.x.options[r.x.answer] : r.x.answer;
     body().innerHTML = `<div class="hrow"><h2>🏁 نتيجة الامتحان</h2><button type="button" id="eNew">امتحان جديد</button></div>
       <div class="score"><b>${X.score}%</b><span>${X.pts} من ${X.graded} صح${X.ungraded ? ` · ${X.ungraded} سؤال ماتصححش (الذكاء مردّش)` : ""}</span></div>
@@ -332,7 +337,7 @@
         <label>دقايق في اليوم <input id="pMin" type="number" min="15" max="600" step="15" value="${plan?.minutes || 60}"></label></div>
       <div class="row"><button type="button" id="pGo" class="accent">${plan ? "🔄 حدّث الخطة حسب تقدّمي" : "اعمل الخطة"}</button><small class="vnow">بتتحسب من فهرس الكتاب، والصفحات اللي قريتها فعلًا، ونقط ضعفك.</small></div>
       ${plan ? `<div class="bar2 big" title="${done} من ${tasks.length}"><i style="width:${tasks.length ? Math.round(100 * done / tasks.length) : 0}%"></i></div><small>خلّصت ${done} من ${tasks.length} مهمة</small>
-      <div class="plan">${plan.days.map((d, i) => `<section class="pday${d.date === today ? " today" : ""}"><h4>اليوم ${i + 1} · ${new Date(d.date).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "short" })}${d.date === today ? " — النهارده" : ""}</h4>
+      <div class="plan">${plan.days.map((d, i) => `<section class="pday${d.date === today ? " today" : ""}"><h4>اليوم ${i + 1} · ${new Date(d.date).toLocaleDateString(LOC(), { weekday: "long", day: "numeric", month: "short" })}${d.date === today ? " — النهارده" : ""}</h4>
         ${d.tasks.length ? d.tasks.map(t => `<div class="ptask${t.done ? " done" : ""}"><label class="chk"><input type="checkbox" data-tk="${t.id}"${t.done ? " checked" : ""}> ${esc(t.t)}</label>
           ${t.from ? `<a href="#" data-go="${esc(t.book)}|${t.from}">افتح</a>` : ""}${t.type === "study" ? `<button type="button" class="ghost" data-tx="${esc(t.t)}">اشرحهولي</button>` : t.type === "weak" ? `<button type="button" class="ghost" data-pr="${esc(t.topic)}" data-p="${t.from}">اتدرّب</button>` : t.type === "exam" ? `<button type="button" class="ghost" data-exam="1">ابدأ</button>` : ""}</div>`).join("") : "<small>راحة / مراجعة خفيفة</small>"}</section>`).join("")}</div>` : ""}`;
     $("pBook").onchange = e => { S._pb = e.target.value; rPlan(); };

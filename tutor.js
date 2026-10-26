@@ -9,7 +9,7 @@
   const EGW = new Set("ازاي عايز عايزه عاوز عاوزه دلوقتي دلوقت ده دي دا دول مش ايه كده كدا بتاع بتاعه بتاعت اوي خالص ليه فين امتي عشان علشان اديني اديلي اعمللي اعملهولي هات هاتلي برضه برضو شويه لسه ازيك بص حاجه حاجات اشرحلي قولي قوللي مفيش مافيش فهمني مفهمتش مافهمتش ايوه طب بقي كمان ازاي".split(" "));
   const GUW = new Set("وش ايش شلون ابغي ابغا ابي ودي زين كذا وايد حيل يبغي هذي الحين دحين اللحين ترا عطني عطيني لاهنت يعطيك شنو ليش وين هاذا هاذي ياخي سوي سويلي خلني مو مب ماني تكفي ابيك يمديك يمدي".split(" "));   // «طيب» مشتركة بين كل اللهجات فمش علامة خليجي
   const MSW = new Set("ماذا لماذا هل اريد الذي التي الذين هذا هذه ارجو سوف لن لم يرجي اود".split(" "));
-  let DIA = localStorage.getItem("dialect") || "eg", AR = localStorage.getItem("dialectAr") || (DIA !== "en" ? DIA : "eg"), MIXED = false;
+  let DIA = localStorage.getItem("dialect") || (localStorage.getItem("uiLang") === "en" ? "en" : "eg"), AR = localStorage.getItem("dialectAr") || (DIA !== "en" ? DIA : "eg"), MIXED = false;
   function detect(q) {
     const letters = (q.match(/[A-Za-z؀-ۿ]/g) || []).length; if (!letters) return null;
     const lat = (q.match(/[A-Za-z]/g) || []).length / letters;
@@ -622,7 +622,8 @@ ${SRC[mode]}
   }
 
   // ================= ٩) امتحانات وفلاش كاردز =================
-  const LET_AR = ["أ", "ب", "ج", "د", "هـ", "و"];
+  const LET_A = ["أ", "ب", "ج", "د", "هـ", "و"], LET_E = ["A", "B", "C", "D", "E", "F"];
+  const LET_AR = new Proxy([], { get: (t, k) => (DIA === "en" || window.__qzLatin ? LET_E : LET_A)[k] });
   function parseJSON(s) {
     s = String(s || "").replace(/```(?:json)?/g, "").replace(/[“”]/g, '"'); const a = s.indexOf("{"), b = s.lastIndexOf("}"); if (a < 0 || b < a) return null;
     let t = s.slice(a, b + 1); for (let i = 0; i < 2; i++) { try { return JSON.parse(t); } catch { t = t.replace(/,\s*([}\]])/g, "$1").replace(/[\u0000-\u001f]+/g, " "); } } return null;
@@ -677,7 +678,7 @@ ${SRC[mode]}
   const srcChip = s => s ? `<a href="#" class="cite" data-id="${esc(s.id)}" data-p="${s.page}">${esc(RAG.pg(s.id, s.page))}</a>` : "";
   function qHTML(x, i, total) {
     const opts = x.type === "short" ? `<details class="qa"><summary>اظهر الإجابة</summary><div>${md(String(x.answer))}${x.explain ? "<br>" + md(x.explain) : ""} ${srcChip(x.s)}</div></details>`
-      : `<div class="qo">${x.options.map((o, k) => `<button type="button" class="qopt" data-k="${k}"><b>${LET_AR[k] || k + 1}</b> ${esc(o)}</button>`).join("")}</div><div class="qf" hidden></div>`;
+      : (window.__qzLatin = /[A-Za-z]/.test(x.q || "") && !/[؀-ۿ]/.test(x.q || ""), `<div class="qo">${x.options.map((o, k) => `<button type="button" class="qopt" data-k="${k}"><b>${LET_AR[k] || k + 1}</b> ${esc(o)}</button>`).join("")}</div><div class="qf" hidden></div>`);
     return `<div class="qz" data-i="${i}"><div class="qh">سؤال ${i + 1}${total ? " من " + total : ""}</div><div class="qq">${md(x.q)}</div>${opts}</div>`;
   }
   const qSpeech = x => x.q + (x.options ? ". " + x.options.map((o, k) => (LET_AR[k] || k + 1) + ": " + o).join(". ") : "");

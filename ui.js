@@ -13,7 +13,7 @@
   const chat = $("chat");
 
   // ---------- الترحيب + اقتراحات ----------
-  const SUGG = [["📖", "اشرحلي الدرس ده"], ["📝", "لخص الفصل ده"], ["🎯", "اختبرني سؤال سؤال"], ["🃏", "اعمللي Flashcards"], ["⭐", "إيه أهم الحاجات اللي لازم أحفظها؟"], ["🧭", "راجع معايا قبل الامتحان"]];
+  const SUGG = localStorage.getItem("uiLang") === "en" ? [["📖", "Explain this lesson"], ["📝", "Summarize this chapter"], ["🎯", "Quiz me one question at a time"], ["🃏", "Make me flashcards"], ["⭐", "What are the most important things to memorize?"], ["🧭", "Review with me before the exam"]] : [["📖", "اشرحلي الدرس ده"], ["📝", "لخص الفصل ده"], ["🎯", "اختبرني سؤال سؤال"], ["🃏", "اعمللي Flashcards"], ["⭐", "إيه أهم الحاجات اللي لازم أحفظها؟"], ["🧭", "راجع معايا قبل الامتحان"]];
   window.showHello = () => {
     const d = document.createElement("div"); d.className = "hello";
     d.innerHTML = `<div class="orb" aria-hidden="true"></div><h2>أهلًا 👋 أنا مدرّسك الخاص</h2><p>ضيف كتابك (PDF) واسألني فيه بأي طريقة — بالمصري أو الخليجي أو الفصحى أو English. هشرحلك من كتابك وأقولك الصفحة.</p>

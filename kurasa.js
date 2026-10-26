@@ -316,7 +316,7 @@
   }
   function counts() {
     const i = PAGES.findIndex(p => p.id === CUR), pg = page(); if (!pg || !$("kNum")) return;
-    $("kNum").textContent = `${(i + 1).toLocaleString("ar-EG")} / ${PAGES.length.toLocaleString("ar-EG")}`; $("kPrev").disabled = i <= 0; $("kNext").disabled = i >= PAGES.length - 1;
+    $("kNum").textContent = `${(i + 1).toLocaleString(localStorage.getItem("uiLang") === "en" ? "en" : "ar-EG")} / ${PAGES.length.toLocaleString(localStorage.getItem("uiLang") === "en" ? "en" : "ar-EG")}`; $("kPrev").disabled = i <= 0; $("kNext").disabled = i >= PAGES.length - 1;
     if (document.activeElement !== $("kTitle")) $("kTitle").value = pg.title || ""; paperMenu();
   }
   function scrollTo(id, smooth = true) { const pv = pvOf(id); if (!pv) return; CUR = id; counts(); $("kScroll").scrollTo({ top: pv.el.offsetTop - 8, behavior: smooth && !matchMedia("(prefers-reduced-motion: reduce)").matches ? "smooth" : "auto" }); }
@@ -479,7 +479,7 @@
       const blob = new Blob([await pdf.save()], { type: "application/pdf" });
       const name = (all ? T("الكراسة") + " " + new Date().toLocaleDateString("en-CA") : (list[0]?.title || T("الكراسة"))).replace(/[\\/:*?"<>|]+/g, " ").trim() + ".pdf";
       const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-      K.lastPdf = { name, pages: list.length, size: blob.size }; st.textContent = "✓ " + T("اتحفظ PDF"); toast(`✅ ${T("اتحفظت الكراسة PDF")} (${list.length.toLocaleString("ar-EG")} ${T("صفحة")})`);
+      K.lastPdf = { name, pages: list.length, size: blob.size }; st.textContent = "✓ " + T("اتحفظ PDF"); toast(`✅ ${T("اتحفظت الكراسة PDF")} (${list.length.toLocaleString(localStorage.getItem("uiLang") === "en" ? "en" : "ar-EG")} ${T("صفحة")})`);
     } catch (e) { st.textContent = ""; toast("⚠️ " + T("مقدرتش أعمل الـ PDF: ") + (e?.message || e)); }
     finally { exporting = false; }
   }
