@@ -813,3 +813,37 @@ body[data-tool=select] #pages .pg{cursor:default}
 .m.a .src{margin-top:8px}
 .chathead{padding:6px 12px 4px;background:var(--card)}
 @media(max-width:800px){#chat>.m.a:not(.typing):not(.sys){padding-inline-start:44px}#chat>.m.a:not(.typing):not(.sys)::before{inset-inline-start:10px}.acts{opacity:1}}
+
+/* ===== ترتيب الشاشة على الكمبيوتر: الكتاب والكراسة ياخدوا المساحة، والأدوات كل مجموعة في سطر واحد ===== */
+@media(min-width:801px){
+  #app{gap:12px;padding:12px}
+  #side{flex:0 0 var(--sidew,clamp(320px,34%,520px))}
+  #viewer{flex:1 1 auto}
+  /* شريط الصفحات + شريط الأدوات: سطر واحد لكل واحد، والزيادة تتسحب بالعرض بدل ما تنزل سطر جديد */
+  #bar,#tools{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;scrollbar-width:thin}
+  #bar{padding:6px 10px;gap:5px}
+  #bar>*,#tools>*{flex:none}
+  #bar button.icon{width:34px;height:34px}
+  #bar button.accent{padding:7px 12px}
+  #bar #solve{margin-inline-start:auto}
+  #tools{padding:4px 10px;gap:4px}
+  #tools .t{width:32px;height:32px}
+  #tools #sz{width:80px}
+  /* الكراسة: الأدوات في سطر واحد */
+  #viewer .kbar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;padding:6px 10px}
+  #viewer .kbar>*{flex:none}
+  #side .kbar{gap:4px 6px;padding:6px 8px;justify-content:flex-start}
+  #side .kdot{width:22px;height:22px}
+  #side .ktool{min-width:30px;height:30px;padding:0 6px}
+  .kscroll{padding:10px 8px 40px}
+  .kstack{gap:16px}
+}
+/* شاشات واسعة: شريط الصفحات وشريط الأدوات جنب بعض في سطر واحد */
+@media(min-width:1500px){
+  #viewer{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto auto 1fr;align-content:stretch}
+  #viewer>*{grid-column:1/-1}
+  #viewer>#bar{grid-column:1;grid-row:3;border-inline-end:1px solid var(--line)}
+  #viewer>#tools{grid-column:2;grid-row:3;background:var(--card)}
+  #viewer>#wrap,#viewer>.pane{grid-row:4;min-height:0}
+  #viewer.alt{display:flex}
+}
