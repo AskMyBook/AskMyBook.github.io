@@ -222,6 +222,11 @@
       $("acGoogle").onclick = async () => { $("acMsg").textContent = T("لحظة… بنفتح صفحة جوجل"); try { await C.signInGoogle(); }
         catch (err) { $("acMsg").textContent = "⚠️ " + (/provider is not enabled|unsupported provider/i.test(err.message) ? T("الدخول بجوجل لسه مش متفعّل على الموقع (لصاحب الموقع: Supabase ← Authentication ← Providers ← Google).") : err.message); } };
       $("acForm").onsubmit = e => { e.preventDefault(); run(false); }; $("acUp").onclick = () => run(true);
+      // زرار جوجل بيظهر بس لو الدخول بجوجل متفعّل فعلًا في Supabase (من غير كده كان بيودّي لصفحة خطأ)
+      if (C.google == null) { const gb = $("acGoogle"), ol = sec.querySelector(".orline"); gb.hidden = true; if (ol) ol.hidden = true;
+        fetch(C.cfg.url.replace(/\/+$/, "") + "/auth/v1/settings", { headers: { apikey: C.cfg.anonKey } }).then(r => r.json()).then(j => { C.google = !!j?.external?.google; }).catch(() => { C.google = false; })
+          .finally(() => { if (C.google && $("acGoogle")) { $("acGoogle").hidden = false; if (ol) ol.hidden = false; } }); }
+      else if (!C.google) { $("acGoogle").hidden = true; const ol = sec.querySelector(".orline"); if (ol) ol.hidden = true; }
       $("acForgot").onclick = async () => { const e = $("acEmail").value.trim(); if (!e) { $("acMsg").textContent = T("اكتب إيميلك الأول."); return; } try { await C.resetPassword(e); $("acMsg").textContent = T("✅ بعتنالك لينك تغيير كلمة السر على الإيميل."); } catch (err) { $("acMsg").textContent = "⚠️ " + err.message; } };
       return;
     }
