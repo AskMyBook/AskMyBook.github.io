@@ -26,6 +26,11 @@
   if (!/^(pdf|kur)$/.test(MAIN)) MAIN = "pdf"; if (!/^(chat|kur)$/.test(SIDE)) SIDE = "chat";
   if (MAIN === "kur" && SIDE === "kur") SIDE = "chat";
   let VIDS = [], VCUR = "";   // الفيديوهات المفتوحة [{id,title}]، والفيديو اللي في الشاشة
+  // الفيديوهات المفتوحة بتفضل بعد الـ Refresh: نفس الفيديو، في نفس المكان، ومن نفس الثانية (واقف لحد ما تدوس تشغيل)
+  let VREST = null;
+  try { const s = JSON.parse(ls.get("lay.vids", "null")); if (s && Array.isArray(s.v) && s.v.length) { VIDS = s.v.filter(x => x && x.id).slice(0, 10).map(x => ({ id: String(x.id), title: String(x.title || "") }));
+    if (VIDS.length) { VCUR = VIDS.some(x => x.id === s.c) ? s.c : VIDS[0].id; VREST = s.st || {}; if (s.w === "main") MAIN = "vid"; else if (s.w === "side") { SIDE = "vid"; OFF = false; if (MAIN === "vid") MAIN = "pdf"; } } } } catch {}
+  const saveVids = () => { try { ls.set("lay.vids", JSON.stringify({ v: VIDS, c: VCUR, w: MAIN === "vid" ? "main" : SIDE === "vid" ? "side" : "", st: Object.fromEntries(VIDS.map(x => [x.id, { t: Math.floor(VST[x.id]?.t || 0) }])) })); } catch {} };
 
   // --- شريط فوق: الكتب + «📓 الكراسة» + الفيديوهات المفتوحة ---
   const books = $("books"), vbar = document.createElement("div"); vbar.id = "viewbar"; books.before(vbar); vbar.append(books);
@@ -119,7 +124,7 @@
     sb.title = sb.ariaLabel = OFF ? T("افتح اللوحة الجانبية") : T("اقفل اللوحة الجانبية"); sb.classList.toggle("on", !OFF);
     ab.classList.toggle("on", AIF);
     ls.set("side.mode", SIDE === "vid" ? "chat" : SIDE); ls.set("side.off", OFF ? "1" : "0"); ls.set("lay.main", MAIN === "vid" ? "pdf" : MAIN);
-    drawViews(); drawVideo();
+    drawViews(); drawVideo(); saveVids();
     if (kur.classList.contains("show")) K.show(); else K.flush();
     requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
   }
@@ -159,6 +164,8 @@
   // =====================================================================
   // حالة كل فيديو (الثانية اللي وقف عندها، وكان شغال ولا لأ) من رسايل مشغّل يوتيوب نفسه (enablejsapi)
   const VST = {};
+  if (VREST) for (const [id, st] of Object.entries(VREST)) VST[id] = { t: +st?.t || 0, playing: false };
+  setInterval(saveVids, 3000); addEventListener("pagehide", saveVids);
   const ytSrc = (id, start, auto) => `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?enablejsapi=1&rel=0&playsinline=1&autoplay=${auto ? 1 : 0}${start > 1 ? "&start=" + Math.floor(start) : ""}&origin=${encodeURIComponent(location.origin)}`;
   const frame = () => vid.querySelector("iframe");
   const cmd = (func, args = []) => { try { frame()?.contentWindow?.postMessage(JSON.stringify({ event: "command", func, args }), "*"); } catch {} };
