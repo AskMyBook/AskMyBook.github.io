@@ -84,7 +84,12 @@ function showEmpty() {
     <p style="margin-top:14px"><button id="pickAll">➕ إضافة كتب (PDF)</button></p>`);
   $("pickAll").onclick = () => $("files").click();
 }
-async function openBook(id, page = 1) {
+// آخر صفحة في كل كتاب: لما تقلب بين الكتب بترجع لنفس الصفحة اللي كنت فيها (مش أول صفحة)
+const bookPos = () => { try { return JSON.parse(localStorage.getItem("bookpos") || "{}"); } catch { return {}; } };
+const keepBookPos = () => { if (!cur.id || !doc) return; const m = bookPos(), p = (wrapHidden() || wasHidden) && keep ? keep.page : cur.page; if (m[cur.id] === p) return; m[cur.id] = p; try { localStorage.setItem("bookpos", JSON.stringify(m)); } catch {} };
+async function openBook(id, page) {
+  if (cur.id && cur.id !== id) keepBookPos();
+  if (page == null) { page = bookPos()[id]; if (!page) try { page = (await idbGet("prog:" + id))?.last; } catch {} page = +page || 1; }
   showTab("book"); cur.want = id;
   if ([...$("book").options].some(o => o.value === id)) $("book").value = id;   // الكتاب المفتوح = الكتاب المحدد للمدرّس
   document.querySelectorAll("#books button").forEach(b => b.classList.toggle("on", b.dataset.id === id));
@@ -1337,7 +1342,7 @@ function renderLib() {
   const bx = $("books"); bx.textContent = "";
   LIB.forEach(e => { const b = document.createElement("button"); b.dataset.id = e.id; b.dataset.saved = "1"; b.classList.toggle("on", e.id === cur.want); b.append(e.name);
     const x = document.createElement("span"); x.className = "bx"; x.textContent = "✕"; x.title = "مسح الكتاب من متصفحك"; x.dataset.del = e.id; b.append(x); bx.append(b); });
-  bx.onclick = ev => { const del = ev.target.dataset?.del; if (del) { ev.stopPropagation(); delBook(del); return; } const id = ev.target.closest("button")?.dataset.id; if (id) openBook(id, 1); };
+  bx.onclick = ev => { const del = ev.target.dataset?.del; if (del) { ev.stopPropagation(); delBook(del); return; } const id = ev.target.closest("button")?.dataset.id; if (id) openBook(id); };
 }
 async function delBook(id) {
   const e = LIB.find(x => x.id === id); if (!e || !confirm(`تمسح «${e.name}» من متصفحك؟ (الملف والفهرس والتظليلات بتاعته)`)) return;
@@ -1347,7 +1352,7 @@ async function delBook(id) {
   try { if (JSON.parse(localStorage.getItem("last") || "null")?.id === id) localStorage.removeItem("last"); } catch {}
   if (cur.id === id) { doc = null; cur.id = null; cur.mounted = null; cur.want = null; $("pages").innerHTML = ""; pgs = []; }
   await libSave(); renderLib();
-  if (!LIB.length) showEmpty(); else if (!doc) openBook(LIB[0].id, 1);
+  if (!LIB.length) showEmpty(); else if (!doc) openBook(LIB[0].id);
 }
 // حدّين واضحين (كل واحد قيمة واحدة في config.js ومستخدمة في كل الموقع):
 //  • MAX_PDF_MB (maxPdfMB، 300): أكبر كتاب يتحفظ على جهازك — حماية للمتصفح.
@@ -1381,7 +1386,7 @@ async function importMany(files) {
 }
 $("files").onchange = e => { importMany([...e.target.files]); e.target.value = ""; };
 $("addAll").onclick = () => $("files").click(); $("addAll2").onclick = () => $("files").click();
-const saveLast = () => { if (cur.id) localStorage.setItem("last", JSON.stringify({ id: cur.id, page: (wrapHidden() || wasHidden) && keep ? keep.page : cur.page })); };
+const saveLast = () => { keepBookPos(); if (cur.id) localStorage.setItem("last", JSON.stringify({ id: cur.id, page: (wrapHidden() || wasHidden) && keep ? keep.page : cur.page })); };
 setInterval(saveLast, 2000); addEventListener("pagehide", saveLast);
 // كتب جاهزة مع الموقع (config.js ← seedBooks: [{file, url}]): بتتحمّل مرة واحدة أول ما الموقع يتفتح وتتحفظ في متصفح المستخدم زي أي كتاب.
 // لو المستخدم مسح كتاب منهم مبيرجعش لوحده (العلامة في localStorage "seeded"). لو التحميل فشل (نت ضعيف) بيحاول تاني المرة الجاية.
@@ -1416,7 +1421,7 @@ async function libInit() {
   if (await seedBooks()) return;   // أول مرة: الكتب الجاهزة اتحمّلت واتفتح أولها
   let opened = false;
   try { const l = JSON.parse(localStorage.getItem("last") || "null"); if (l && LIB.find(x => x.id === l.id)) { openBook(l.id, l.page || 1); opened = true; } } catch {}
-  if (!opened) { if (!LIB.length) showEmpty(); else openBook(LIB[0].id, 1); }
+  if (!opened) { if (!LIB.length) showEmpty(); else openBook(LIB[0].id); }
   setTimeout(() => bkBackground(LIB.map(x => x.id).filter(id => !BK[id]?.q)), 4000);   // فهرسة سريعة للكتب اللي لسه متفهرستش
 }
 libInit();

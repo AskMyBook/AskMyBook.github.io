@@ -210,8 +210,9 @@ function sseReader(body, pick) {
   };
 }
 
-// مهلة أول كلمة لكل مزوّد (FIRST_TOKEN_MS بالمللي ثانية، الافتراضي ٢٠ ثانية)
-const firstMs = (env, p) => Math.max(5000, +env.FIRST_TOKEN_MS || 20000);
+// مهلة أول كلمة لكل مزوّد: لو مابدأش يرد خلالها بنروح للي بعده على طول (الطالب مايستناش مزوّد معلّق).
+// سؤال عادي ٧ ثواني، وسياق طويل أو صور ١٥ ثانية. FIRST_TOKEN_MS (بالمللي ثانية) بيغيّرها لكل الأنواع.
+const firstMs = (env, p, task = "explain") => +env.FIRST_TOKEN_MS > 0 ? Math.max(3000, +env.FIRST_TOKEN_MS) : task === "long" || task === "vision" ? 15000 : 7000;
 // ---------- السلسلة: بنجرّب لحد ما مزوّد يطلّع أول كلمة فعلًا ----------
 // (لو مزوّد رجّع 200 بس الرد فاضي أو وقع قبل أول كلمة، بنعدّي للي بعده من غير ما الطالب يحس)
 // ---------- التوجيه الذكي (زي Weblume AI): كل سؤال بيروح الأول للمزوّد الأنسب ليه، وبعده الباقي بالترتيب ----------
@@ -255,7 +256,7 @@ export async function chatWithFallback(env, req) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const model = await modelFor(p, env);
       // مهلة لأول كلمة: مزوّد بطيء أو معلّق مايخليش الطالب يستنى — بعد المهلة بنعدّي للي بعده
-      const tStart = Date.now(), ac = new AbortController(), ms = firstMs(env, p), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "SlowProvider" })), ms);
+      const tStart = Date.now(), ac = new AbortController(), ms = firstMs(env, p, task), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "SlowProvider" })), ms);
       const onAbort = () => ac.abort(req.signal.reason); req.signal?.addEventListener?.("abort", onAbort, { once: true });
       try {
         const { body, pick } = await callOne(p, env, { ...req, signal: ac.signal, model }), next = sseReader(body, pick);

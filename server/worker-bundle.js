@@ -773,7 +773,7 @@ function sseReader(body, pick) {
     }
   };
 }
-var firstMs = (env, p) => Math.max(5e3, +env.FIRST_TOKEN_MS || 2e4);
+var firstMs = (env, p, task = "explain") => +env.FIRST_TOKEN_MS > 0 ? Math.max(3e3, +env.FIRST_TOKEN_MS) : task === "long" || task === "vision" ? 15e3 : 7e3;
 var ROUTES = {
   quick: ["cerebras", "groq", "gemini", "mistral", "openrouter", "geminilite", "nvidia"],
   long: ["gemini", "geminilite", "mistral", "openrouter", "cerebras", "groq", "nvidia"],
@@ -814,7 +814,7 @@ async function chatWithFallback(env, req) {
     const p = byId[id];
     for (let attempt = 0; attempt < 3; attempt++) {
       const model = await modelFor2(p, env);
-      const tStart = Date.now(), ac = new AbortController(), ms = firstMs(env, p), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "SlowProvider" })), ms);
+      const tStart = Date.now(), ac = new AbortController(), ms = firstMs(env, p, task), timer = setTimeout(() => ac.abort(Object.assign(new Error("slow"), { name: "SlowProvider" })), ms);
       const onAbort = () => ac.abort(req.signal.reason);
       req.signal?.addEventListener?.("abort", onAbort, { once: true });
       try {

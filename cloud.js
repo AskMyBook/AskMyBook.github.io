@@ -157,7 +157,7 @@
     } catch (e) { C.busy = false; fail(e); }
   };
   async function apply(changed) {   // البيانات الجديدة تظهر على طول من غير تحديث للصفحة
-    if (changed.has("lib") || [...changed].some(k => k.startsWith("book:"))) { LIB = (await idbGet("lib")) || []; syncNames(); renderLib(); if (!doc && LIB.length) openBook(LIB[0].id, 1); }
+    if (changed.has("lib") || [...changed].some(k => k.startsWith("book:"))) { LIB = (await idbGet("lib")) || []; syncNames(); renderLib(); if (!doc && LIB.length) openBook(LIB[0].id); }
     if ([...changed].some(k => k.startsWith("idx:"))) { try { await bkPreload(); if (cur.id && changed.has("idx:" + cur.id) && doc) { await bkLoadFor(cur.id, doc); bkInit?.(); } } catch {} }
     if (cur.id && changed.has("ann_" + cur.id)) window.inkLoad?.(cur.id);
     window.dispatchEvent(new CustomEvent("cloud-synced", { detail: { keys: [...changed] } }));
