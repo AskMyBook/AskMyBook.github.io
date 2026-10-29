@@ -28,7 +28,10 @@ const block = ctx => Promise.all([ctx.addInitScript(() => { localStorage.setItem
 
 try {
   // ===== 10) startup without a configured server =====
-  { const ctx = await b.newContext(); await block(ctx); const page = await ctx.newPage(); watch(page, "startup");
+  { const ctx = await b.newContext(); await block(ctx);
+    // الموقع الحقيقي فيه سيرفر متظبط في config.js؛ هنا بنجرّب حالة «من غير سيرفر» فبنفضّي العنوان
+    await ctx.route(/\/config\.js/, async r => { const res = await r.fetch(); r.fulfill({ response: res, body: (await res.text()).replace(/proxyUrl: "[^"]*"/, 'proxyUrl: ""') }); });
+    const page = await ctx.newPage(); watch(page, "startup");
     await page.goto(SITE); await sleep(800);
     const s = await page.evaluate(() => ({ lib: LIB.length, empty: /مكتبتك فاضية/.test($("vmsg").innerText), px: PX.status(), eng: TTS.current()?.id, hello: !!document.querySelector("#chat .hello") }));
     ok("10. app starts without a server: empty library, welcome screen, no errors", s.lib === 0 && s.empty && s.hello && s.px === "off", JSON.stringify(s));

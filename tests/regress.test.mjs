@@ -22,6 +22,7 @@ const b = await chromium.launch();
 async function open(opts = {}, init) {
   const ctx = await b.newContext(opts);
   await ctx.route(EXT, r => r.fulfill({ status: 404, body: "" }));
+  await ctx.route(/\/config\.js(\?|$)/, async r => { const res = await r.fetch(); r.fulfill({ response: res, body: (await res.text()).replace(/(proxyUrl|supabaseUrl|supabaseAnonKey): "[^"]*"/g, '$1: ""') }); });   // الاختبار ده من غير سيرفر ولا حسابات (الموقع الحقيقي متظبط في config.js)
   const page = await ctx.newPage(), E = [], st = { step: "load" };
   await page.addInitScript(() => addEventListener("unhandledrejection", e => console.error("UNHANDLED_REJECTION " + (e.reason?.stack || e.reason))));
   if (init) await page.addInitScript(init);
@@ -82,12 +83,13 @@ try {
     ok("public settings: no API-key providers / local AI in the provider list", !pub.provs.some(v => ["gemini", "claude", "local"].includes(v)) && pub.provs.includes("free") && pub.provs.includes("puter"), pub.provs);
     ok("public settings: embeddings mode, voice internals (one-voice, language, pitch, status lines) and API-key field are hidden", !pub.embmode && !pub.tone && !pub.tlang && !pub.tpitch && !pub.vnow && !pub.keyRow, pub);
     ok("public settings: owner-only text («لصاحب الموقع», README, SUPABASE, server) is not shown to students", !/لصاحب الموقع|README|SUPABASE|service_role|سيرفر الموقع \(لو صاحب/.test(pub.txt) && !pub.acct, pub.txt.slice(0, 300));
-    ok("public settings: what students need is still there (AI source, voice engine, voice, speed)", pub.srclock && pub.tprov && pub.tvoice && pub.vrate, pub);
+    // قسم الصوت كله مستخبي في الموقع (#vrow) — اختيار صاحب الموقع؛ الطالب بيختار المزوّد ومصدر الإجابات بس
+    ok("public settings: what students need is still there (AI provider + answer source)", pub.srclock && pub.provs.length >= 2, pub);
     ok("public settings: no JS errors", !E.length, E); await ctx.close(); }
   { const { ctx, page, E } = await open({ viewport: { width: 1366, height: 800 } }, () => localStorage.setItem("dev", "1"));
     await page.evaluate(() => { $("settings").hidden = false; syncSettings(); }); await sleep(400);
     const dev = await page.evaluate(() => { const vis = id => { const e = $(id); return !!e && e.offsetParent !== null; }; return { provs: [...$("prov").options].map(o => o.value), embmode: vis("embmode"), tone: vis("tone"), vnow: vis("vnow"), acct: vis("acct") }; });
-    ok("owner view (?dev=1 / devSettings): every advanced setting is back", ["gemini", "claude", "local"].every(v => dev.provs.includes(v)) && dev.embmode && dev.tone && dev.vnow && dev.acct, dev);
+    ok("owner view (?dev=1 / devSettings): every advanced setting is back", ["gemini", "claude", "local"].every(v => dev.provs.includes(v)) && dev.embmode && dev.acct, dev);
     ok("owner view: no JS errors", !E.length, E); await ctx.close(); }
   { const { ctx, page } = await open({}); await page.goto(`http://127.0.0.1:${port}/?dev=1`); await sleep(1000);
     const a = await page.evaluate(() => ({ dev: DEV, ls: localStorage.getItem("dev") })); await page.goto(`http://127.0.0.1:${port}/?dev=0`); await sleep(800);
@@ -172,25 +174,28 @@ try {
     ok("free services down + the student has a Gemini key → the answer still arrives (automatic fallback)", /مؤثر بيغيّر حركة/.test(await page.evaluate(() => document.querySelector("#chat").innerText)));
     ok("fallback flow: no JS errors", !E.length, E); await ctx.close(); }
 
-  // ===== ٥) حدّين واضحين: حفظ على الجهاز (300) وتزامن مع الحساب (50 = حد Supabase) =====
-  { const { ctx, page, E } = await open();
-    const sqlMB = +readFileSync(path.join(ROOT, "server", "supabase.sql"), "utf8").match(/false,\s*(\d+),\s*array\['application\/pdf'\]/)[1] / 1048576;
+  // ===== ٥) حدّين واضحين: حفظ على الجهاز (maxPdfMB) وتزامن مع الحساب (syncMaxPdfMB) — الكتاب الكبير بيترفع أجزاء أصغر من حد الـ bucket =====
+  { let { ctx, page, E } = await open();
+    const sqlMB = +readFileSync(path.join(ROOT, "server", "supabase.sql"), "utf8").match(/false,\s*(\d+),\s*array\['application\/pdf'/)[1] / 1048576;
     const cfg = readFileSync(path.join(ROOT, "config.js"), "utf8"), localMB = +cfg.match(/maxPdfMB:\s*(\d+)/)[1], syncMB = +cfg.match(/syncMaxPdfMB:\s*(\d+)/)[1];
     const site = await page.evaluate(() => ({ local: MAX_PDF_MB, sync: SYNC_MAX_MB }));
-    ok(`limits agree everywhere: device ${localMB} MB (config = site ${site.local}), cloud sync ${syncMB} MB (config = site ${site.sync} = Supabase bucket ${sqlMB})`, localMB === site.local && syncMB === site.sync && syncMB === sqlMB && localMB >= syncMB, { localMB, syncMB, sqlMB, site });
-    // كتاب 51 ميجا (أكبر من حد المزامنة): بيتحفظ على الجهاز + رسالة إنه مش هيتزامن
+    ok(`limits agree everywhere: device ${localMB} MB (config = site ${site.local}), cloud sync ${syncMB} MB (config = site ${site.sync}), each uploaded part fits the Supabase bucket (${sqlMB} MB)`, localMB === site.local && syncMB === site.sync && localMB >= syncMB && sqlMB <= 50 && sqlMB >= 46, { localMB, syncMB, sqlMB, site });
+    ok("size limits: no JS errors", !E.length, E); await ctx.close();
+    // نفس المنطق بحدود صغيرة (عشان الاختبار يبقى سريع): جهاز 12 ميجا، تزامن 5 ميجا
+    ({ ctx, page, E } = await open({}, () => { window.TUTOR_CONFIG = { maxPdfMB: 12, syncMaxPdfMB: 5 }; }));
+    const L1 = 12, S1 = 5;
     const src = readFileSync(path.join(FX, "newton.pdf")), nl = src.indexOf(10) + 1;
-    const mid = Buffer.alloc((syncMB + 1) * 1048576, 120); mid[0] = 37; mid[mid.length - 1] = 10;   // سطر تعليق % طويل (صالح جوه PDF)
-    const bigPdf = path.join(os.tmpdir(), "big51-" + port + ".pdf"); writeFileSync(bigPdf, Buffer.concat([src.subarray(0, nl), mid, src.subarray(nl)]));
+    const mid = Buffer.alloc((S1 + 1) * 1048576, 120); mid[0] = 37; mid[mid.length - 1] = 10;   // سطر تعليق % طويل (صالح جوه PDF)
+    const bigPdf = path.join(os.tmpdir(), "big-" + port + ".pdf"); writeFileSync(bigPdf, Buffer.concat([src.subarray(0, nl), mid, src.subarray(nl)]));
     await page.setInputFiles("#files", bigPdf); await sleep(3500); rmSync(bigPdf, { force: true });
     const r = await page.evaluate(() => ({ lib: LIB.length, size: LIB[0]?.size, msg: $("vmsg").innerText }));
-    ok(`a ${syncMB + 1} MB book is accepted on the device, and the student is told it won't sync`, r.lib === 1 && r.size > syncMB * 1048576 && new RegExp("اتحفظ على جهازك بس").test(r.msg) && !/أكبر من \d+ ميجا: /.test(r.msg), r);
+    ok(`a ${S1 + 1} MB book (over the sync limit) is accepted on the device, and the student is told it won't sync`, r.lib === 1 && r.size > S1 * 1048576 && new RegExp("اتحفظ على جهازك بس").test(r.msg) && !/أكبر من \d+ ميجا: /.test(r.msg), r);
     // أكبر من حد الجهاز: يترفض قبل الحفظ ومعاه الرقم
-    const huge = path.join(os.tmpdir(), "huge-" + port + ".pdf"); writeFileSync(huge, Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc((localMB + 1) * 1048576, 32)]));
-    await page.evaluate(async () => { await delBook(LIB[0].id); }); await sleep(600);
+    const huge = path.join(os.tmpdir(), "huge-" + port + ".pdf"); writeFileSync(huge, Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc((L1 + 1) * 1048576, 32)]));
+    await page.evaluate(async () => { if (LIB[0]) await delBook(LIB[0].id); }); await sleep(600);
     await page.setInputFiles("#files", huge); await sleep(3000); rmSync(huge, { force: true });
     const h = await page.evaluate(() => ({ lib: LIB.length, msg: $("vmsg").innerText + " " + ($("ttoast")?.textContent || "") }));
-    ok(`a book over the device limit (${localMB} MB) is refused before saving, with the limit in the message`, h.lib === 0 && new RegExp(String(localMB)).test(h.msg), h);
+    ok(`a book over the device limit (${L1} MB) is refused before saving, with the limit in the message`, h.lib === 0 && new RegExp(String(L1)).test(h.msg), h);
     ok("size-limit flow: no JS errors", !E.length, E); await ctx.close(); }
   // ===== ٦) كتب جاهزة مع الموقع (config.seedBooks): بتتحمّل مرة، مبترجعش بعد المسح، والفشل مش بيوقع الموقع =====
   { const { mkdirSync, copyFileSync } = await import("node:fs"), BD = path.join(ROOT, "books"); mkdirSync(BD, { recursive: true });

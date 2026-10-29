@@ -35,7 +35,7 @@ try {
   const ctx = await b.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true }), page = await ctx.newPage();
   page.on("pageerror", e => errs.push(e.message)); page.on("dialog", d => d.accept());
   await ctx.route(BLOCK, r => r.fulfill({ status: 404, body: "" }));
-  await page.addInitScript(() => localStorage.setItem("proxy", "/"));
+  await page.addInitScript(() => { localStorage.setItem("proxy", "/"); localStorage.setItem("toolsOpen", "1"); });   // شريط الأدوات مستخبي لحد ما تدوس القلم
   await page.goto(`http://127.0.0.1:${port}/`); await sleep(800);
   await page.setInputFiles("#files", [path.join(FX, "newton.pdf")]); await sleep(3000);
 

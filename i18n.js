@@ -191,8 +191,15 @@
     [/^⚠️ خدمة الذكاء الاصطناعي رجعت خطأ \((\d+)\)\. دوس «جرّب تاني» بعد شوية\.$/, "⚠️ The AI service returned an error ($1). Press “Try again” in a bit."],
     [/^تمسح «(.+)» من متصفحك؟ \(الملف والفهرس والتظليلات بتاعته\)$/, "Remove “$1” from your browser? (the file, its index and highlights)"],
     [/^سؤال (\d+) من (\d+)$/, "Question $1 of $2"], [/^سؤال (\d+)$/, "Question $1"], [/^صح! 👏 ?(.*)$/, "Correct! 👏 $1"], [/^لأ، الإجابة الصح (\S+): (.*)$/, "No, the correct answer is $1: $2"],
+    [/^📝 عندك امتحان لسه مخلصتوش — كمّله من مركز المذاكرة ← امتحان( \(الوقت شغال\))?$/, (m, t) => "📝 You have an unfinished exam — continue it from Study hub → Exam" + (t ? " (the timer is running)" : "")],
+    [/^جاوبت (\d+) من (\d+)$/, "Answered $1 of $2"], [/^🔁 أعد الأسئلة اللي غلطت فيها \((\d+)\)$/, "🔁 Retake the questions I got wrong ($1)"], [/^سؤال (\d+)$/, "Question $1"],
+    [/^(فيه (\d+) سؤال من غير إجابة\. )?(وفيه (\d+) سؤال معلّم عليه عشان ترجعله\. )?تسلّم برضه؟$/, (m, a, n, b, f) => (a ? n + " questions are unanswered. " : "") + (b ? f + " questions are flagged to come back to. " : "") + "Submit anyway?"],
+    [/^(\d+(?:\.5)?) من (\d+) صح(.*)$/, (m, a, n, r) => a + " of " + n + " right" + r.replace(/ · (\d+) سؤال ماتصححش \(الذكاء مردّش\)/, " · $1 ungraded (the AI didn't answer)")],
     [/^اتضاف (.+)$/, "Added $1"], [/^(\d+) سؤال$/, "$1 questions"], [/^(\d+) صفحة$/, "$1 pages"], [/^(\d+) من (\d+)$/, "$1 of $2"]
   );
+  Object.assign(D, { "إجابتك": "Your answer", "إجابتك:": "Your answer:", "اكتب الخطوات والناتج": "Write the steps and the result", "🟡 ناقصة": "🟡 Partial", "مفيش إجابة.": "No answer.", "🎯 محتاج تراجع": "🎯 Needs review" });
+  Object.assign(D, { "🔁 أعد نفس الامتحان": "🔁 Retake the same exam", "✍️ صحّح الباقي تاني": "✍️ Grade the rest again", "بصحح…": "Grading…", "علّم عليه عشان ترجعله": "Flag it to come back to",
+    "تلغي الامتحان؟": "Cancel the exam?", "🎉 مفيش أسئلة غلط في الامتحان ده.": "🎉 No wrong questions in this exam.", "⏱ الوقت خلص — بصحح الامتحان.": "⏱ Time's up — grading the exam." });
   function tr(s) {
     const t = s.trim(); if (!t || !/[؀-ۿ]/.test(t)) return null;
     if (D[t]) return s.replace(t, D[t]);

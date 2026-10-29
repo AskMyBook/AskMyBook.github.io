@@ -130,6 +130,23 @@ try {
   ok("exam report: score, per-question right/wrong, explanation, chapter + page link, weak topics", rep.s === "50%" && rep.items.join() === "correct,wrong,correct,wrong" && rep.expl && rep.links === 4 && /Second Law/.test(rep.weak), rep);
   const ex = await page.evaluate(async id => ({ exams: (await idbGet("exams")).length, weak: await idbGet("weak:" + id) }), nid);
   ok("exam saved + real mistakes recorded per topic", ex.exams === 1 && Object.values(ex.weak.topics).some(t => /Second Law/.test(t.name) && t.wrong === 2), ex);
+  // إعادة الأسئلة اللي غلطت فيها: نفس الأسئلة من غير ما نطلب امتحان جديد، والإجابة المطابقة بتتصحح على طول من غير الذكاء
+  const nGen = () => page.evaluate(() => __llm.filter(x => /امتحانات دقيقة|بيصحح إجابات/.test(x.sys)).length);
+  const g0 = await nGen();
+  ok("exam report: «أعد الأسئلة اللي غلطت فيها (2)» + «أعد نفس الامتحان» + time taken", await page.evaluate(() => /\(2\)/.test($("eWrong")?.textContent || "") && !!$("eSame") && /⏱/.test(document.querySelector(".score").innerText)));
+  await page.click("#eWrong"); await page.waitForSelector(".exq li", { timeout: 5000 });
+  ok("retake wrong: only the 2 wrong questions, no new AI request", await page.evaluate(() => document.querySelectorAll(".exq li").length) === 2 && await nGen() === g0);
+  await page.check('.exq li[data-i="0"] input[value="1"]'); await sleep(700);
+  const cur0 = await page.evaluate(() => idbGet("exam:cur"));
+  ok("exam in progress is saved (survives refresh) + progress «جاوبت 1 من 2»", cur0?.qs?.length === 2 && cur0.ans[0] === 1 && /جاوبت 1 من 2/.test(await page.textContent("#eProg")), cur0?.ans);
+  await page.click('.qflag[data-f="1"]'); ok("flag a question to come back to it", await page.evaluate(() => document.querySelector('.exnav [data-j="1"]').classList.contains("fl")));
+  await page.fill('.exq li[data-i="1"] textarea', "Newtons."); await page.click("#eSubmit"); await page.waitForSelector(".score", { timeout: 8000 });
+  { const sc = await page.textContent(".score b"), ng = await nGen(); ok("local grading: «Newtons.» = «newtons» graded right without calling the AI → 100%", sc === "100%" && ng === g0, { sc, ng, g0, items: await page.evaluate(() => [...document.querySelectorAll(".exr li")].map(l => l.className + ":" + l.innerText.slice(0, 80))) }); }
+  ok("finished exam is cleared from the resume slot", await page.evaluate(() => idbGet("exam:cur")) == null);
+  await page.click("#eNew"); await sleep(400);
+  ok("past exams listed and clickable", await page.evaluate(() => document.querySelectorAll(".pastb").length) === 2);
+  await page.click(".pastb >> nth=1"); await page.waitForSelector(".score", { timeout: 3000 });
+  ok("past exam opens its full report (old first exam: 50%, 4 questions)", await page.textContent(".score b") === "50%" && await page.evaluate(() => document.querySelectorAll(".exr li").length) === 4);
   // الوقت خلص = تسليم تلقائي
   await page.click("#eNew"); await sleep(300); await page.check("#eAll"); await page.fill("#eN", "4"); await page.fill("#eT", "1"); await page.click("#eGo"); await page.waitForSelector(".exq li", { timeout: 15000 });
   await page.evaluate(() => { STUDY._EX.end = Date.now() - 10; }); await page.waitForSelector(".score", { timeout: 8000 }).catch(() => {});
@@ -170,6 +187,12 @@ try {
   // ===== «ذاكر مع الـ AI» =====
   await page.evaluate(id => STUDY.studyWith(id), nid); await sleep(1500);
   ok("«study with AI»: teacher greets and offers the book's chapters", await page.evaluate(() => { const n = [...document.querySelectorAll("#chat .m.a")].at(-1); return /جاهز أذاكر معاك/.test(n.innerText) && n.querySelectorAll(".chip").length >= 3; }));
+  // امتحان شغال + Refresh = يكمّل بنفس الإجابات
+  await page.evaluate(async () => { const r = (await idbGet("exams")).at(-1); STUDY.retake(r, false); }); await page.waitForSelector(".exq li", { timeout: 5000 });
+  await page.check('.exq li[data-i="0"] input[value="0"]'); await sleep(800);
+  await page.reload(); await sleep(2500); await page.evaluate(() => STUDY.open("exam")); await sleep(800);
+  ok("refresh in the middle of an exam → it continues with the same answers", await page.evaluate(() => document.querySelectorAll(".exq li").length >= 2 && document.querySelector('.exq li[data-i="0"] input[value="0"]')?.checked === true));
+  await page.click("#eQuit"); await sleep(400);
   ok("no page errors", !errs.length, errs);
 } finally { await b.close(); srv.kill(); }
 console.log(`\n${pass} passed, ${fail} failed  (LLM mocked)`);

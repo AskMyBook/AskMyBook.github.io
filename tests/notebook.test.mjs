@@ -73,6 +73,8 @@ try {
   const c2 = await b.newContext(), p2 = await c2.newPage(); p2.on("pageerror", e => errs.push(e.message));
   await c2.route(BLOCK, r => r.fulfill({ status: 404, body: "" }));
   await c2.route(/supabase-js/, r => r.fulfill({ status: 200, headers: { "content-type": "text/javascript" }, body: GSTUB }));
+  // الزرار بيظهر بس لو Google متفعّل في إعدادات المشروع (/auth/v1/settings)
+  await c2.route(/demo\.supabase\.co\/auth\/v1\/settings/, r => r.fulfill({ status: 200, headers: { "content-type": "application/json", "access-control-allow-origin": "*" }, body: JSON.stringify({ external: { google: true, email: true } }) }));
   await c2.addInitScript(() => { window.TUTOR_CONFIG = { supabaseUrl: "https://demo.supabase.co", supabaseAnonKey: "anon-public-key" }; localStorage.setItem("proxy", "/"); });
   await p2.goto(`http://127.0.0.1:${port}/`); await sleep(1500);
   await p2.click("#acctBtn"); await sleep(300);

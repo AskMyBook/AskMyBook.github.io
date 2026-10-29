@@ -149,7 +149,20 @@
   new MutationObserver(() => $("chat").querySelectorAll(".m.a:not(.typing)").forEach(n => { if (!n._noted) decorate(n); })).observe($("chat"), { subtree: true, attributes: true, attributeFilter: ["class"] });
 
   // ================= ٣) الامتحانات =================
-  const EX = { cfg: null, qs: [], ans: [], timer: 0, end: 0, done: false, res: null };
+  const EX = { cfg: null, qs: [], ans: [], flag: [], timer: 0, end: 0, done: false, res: null };
+  // الامتحان اللي شغال بيتحفظ مع كل إجابة: لو عملت Refresh أو قفلت الصفحة بيكمّل من نفس المكان ونفس الوقت
+  let exSvT = 0;
+  const saveEx = (now) => { clearTimeout(exSvT); const f = () => idbSet("exam:cur", EX.qs.length && !EX.done ? { id: EX.id, cfg: EX.cfg, qs: EX.qs, ans: EX.ans, flag: EX.flag, start: EX.start, end: EX.end } : null).catch(() => {}); if (now) f(); else exSvT = setTimeout(f, 400); };
+  (async () => { try { const c = await idbGet("exam:cur"); if (!c?.qs?.length) return;
+    for (let i = 0; i < 40 && !LIB.length; i++) await new Promise(r => setTimeout(r, 250));   // المكتبة بتتحمّل بعد الصفحة
+    if (EX.qs.length || (LIB.length && !LIB.some(e => e.id === c.cfg?.id))) return;
+    Object.assign(EX, { id: c.id, cfg: c.cfg, qs: c.qs, ans: c.ans || c.qs.map(() => null), flag: c.flag || [], start: c.start, end: c.end || 0, done: false, res: null });
+    if (EX.end) EX.timer = setInterval(tick, 1000);
+    toast("📝 عندك امتحان لسه مخلصتوش — كمّله من مركز المذاكرة ← امتحان" + (EX.end ? " (الوقت شغال)" : "")); } catch {} })();
+  // تصحيح سريع من غير ذكاء اصطناعي لما إجابة «أكمل الفراغ» / الإجابة القصيرة هي نفس الإجابة النموذجية
+  const normA = s => String(s ?? "").toLowerCase().normalize("NFKC").replace(/[\u064B-\u0652\u0640]/g, "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/(?<!\d)\.|\.(?!\d)/g, " ").replace(/[^\p{L}\p{N}.]+/gu, " ").trim();   // النقطة العشرية بس هي اللي بتفضل
+  const sameAns = (a, m) => { const x = normA(a), y = normA(m); return !!x && !!y && (x === y || (y.length >= 3 && x.split(" ").length <= y.split(" ").length + 2 && (` ${x} `).includes(` ${y} `))); };
+  const fmtDur = sec => sec >= 3600 ? `${Math.floor(sec / 3600)}:${String(Math.floor(sec / 60) % 60).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}` : `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 const latinQs = qs => localStorage.getItem("uiLang") === "en" || (qs || []).filter(x => /[A-Za-z]/.test(x.q || "") && !/[؀-ۿ]/.test(x.q || "")).length * 2 > (qs || []).length;
   const LETS = qs => latinQs(qs) ? ["A", "B", "C", "D", "E", "F"] : ["أ", "ب", "ج", "د", "هـ", "و"];
   const DIFF = { easy: "سهل", medium: "متوسط", hard: "صعب", vhard: "صعب جدًا" };
@@ -182,7 +195,8 @@ const latinQs = qs => localStorage.getItem("uiLang") === "en" || (qs || []).filt
         <fieldset><legend>نوع الأسئلة</legend><div class="types">${Object.entries(TYPES).map(([k, v]) => `<label class="chk"><input type="checkbox" data-t="${k}"${k === "mcq" || k === "tf" || k === "short" ? " checked" : ""}> ${v}</label>`).join("")}</div></fieldset>
         <button type="button" id="eGo" class="accent">ابدأ الامتحان</button> <small id="eMsg" class="vnow"></small>
       </div>
-      ${past.length ? `<h3>امتحاناتك اللي فاتت</h3><ul class="past">${past.map(x => `<li>${dfmt(x.date)} — <b>${x.score}%</b> (${x.right}/${x.total})${x.weak?.length ? " · ضعف في: " + esc(x.weak.slice(0, 3).join("، ")) : ""}</li>`).join("")}</ul>` : ""}`;
+      ${past.length ? `<h3>امتحاناتك اللي فاتت</h3><ul class="past">${past.map(x => `<li><button type="button" class="pastb" data-x="${x.date}">${dfmt(x.date)} — <b>${x.score}%</b> (${x.right}/${x.total})${x.weak?.length ? " · ضعف في: " + esc(x.weak.slice(0, 3).join("، ")) : ""}</button></li>`).join("")}</ul>` : ""}`;
+    body().querySelectorAll(".pastb").forEach(b => b.onclick = async () => { const rec = (await DB.get("exams", [])).find(x => String(x.date) === b.dataset.x); if (rec) { rec.id ||= "d" + rec.date; showPast(rec); } });
     $("eBook").onchange = e => { EX.cfg = { id: e.target.value }; rExam(); };
     $("eAll").onchange = e => body().querySelectorAll("[data-s]").forEach(c => c.checked = e.target.checked);
     $("eGo").onclick = () => {
@@ -201,7 +215,7 @@ const latinQs = qs => localStorage.getItem("uiLang") === "en" || (qs || []).filt
     return blocks;
   }
   S.startExam = async cfg => {
-    EX.cfg = cfg; EX.qs = []; EX.ans = []; EX.res = null; EX.done = false; clearInterval(EX.timer);
+    EX.cfg = cfg; EX.qs = []; EX.ans = []; EX.flag = []; EX.res = null; EX.done = false; clearInterval(EX.timer); saveEx(true);
     if (!hub.hidden) body().innerHTML = `<div class="hload"><div class="spin"></div><p>بجهّز الامتحان من «${esc(nm(cfg.id))}»… <span id="eP"></span></p></div>`;
     try {
       const blocks = await examBlocks(cfg.id, cfg.secs, provider() === "free" ? 7000 : 14000);
@@ -225,62 +239,104 @@ const latinQs = qs => localStorage.getItem("uiLang") === "en" || (qs || []).filt
         onText: t => { const e = $("eP"); if (e) e.textContent = Math.min(99, Math.round(t.length / (cfg.count * 3.2))) + "%"; } });
       const qs = r.value.map(x => ({ ...x, difficulty: cfg.diff, sec: x.sec || blocks[0].sec, page: x.page || blocks[0].page }));
       if (!qs.length) throw new Error("الموديل مرجّعش أسئلة صالحة. جرّب تاني.");
-      EX.id = uid(); EX.qs = qs; EX.ans = qs.map(() => null); EX.start = Date.now(); EX.end = cfg.minutes ? Date.now() + cfg.minutes * 60000 : 0;
-      if (EX.end) EX.timer = setInterval(tick, 1000);
-      if (hub.hidden) S.open("exam"); else rTake();
+      beginExam(cfg, qs);
     } catch (e) { if (!hub.hidden) { body().innerHTML = `<p class="hempty">⚠️ ${esc(e.name === "AbortError" ? "اتلغى." : errMsg(e) || e.message)}</p><button type="button" id="eBack">رجوع</button>`; $("eBack").onclick = () => { EX.qs = []; rExam(); }; } }
+  };
+  // بداية امتحان (أسئلة جديدة من الذكاء، أو نفس الأسئلة تاني / الأسئلة اللي غلطت فيها من امتحان قديم)
+  function beginExam(cfg, qs) {
+    clearInterval(EX.timer); EX.cfg = cfg; EX.id = uid(); EX.qs = qs; EX.ans = qs.map(() => null); EX.flag = []; EX.res = null; EX.done = false;
+    EX.start = Date.now(); EX.end = cfg.minutes ? Date.now() + cfg.minutes * 60000 : 0;
+    if (EX.end) EX.timer = setInterval(tick, 1000);
+    saveEx(true); if (hub.hidden) S.open("exam"); else rTake();
+  }
+  S.retake = (rec, onlyWrong) => {
+    const qs = (rec.questions || []).filter(q => !onlyWrong || q.verdict !== "correct").map(q => ({ id: q.id, type: q.type, q: q.q, options: q.options, answer: q.correct, explain: q.explain || "", sec: q.lesson, page: q.page, difficulty: rec.difficulty }));
+    if (!qs.length) return toast("🎉 مفيش أسئلة غلط في الامتحان ده.");
+    beginExam({ id: rec.book, secs: (rec.chapters || []).map(l => ({ label: l })), count: qs.length, diff: rec.difficulty || "medium", types: [...new Set(qs.map(q => q.type))], minutes: onlyWrong ? 0 : rec.timeLimit || 0, retakeOf: rec.id }, qs);
   };
   function tick() { const left = EX.end - Date.now(), el = $("eTimer"); if (el) { const m = Math.max(0, Math.floor(left / 60000)), s = Math.max(0, Math.floor(left / 1000) % 60); el.textContent = `⏱ ${m}:${String(s).padStart(2, "0")}`; el.classList.toggle("low", left < 60000); }
     if (left <= 0) { clearInterval(EX.timer); if (!EX.done) { toast("⏱ الوقت خلص — بصحح الامتحان."); submitExam(); } } }
   function rTake() {
-    const L = LETS(EX.qs);
-    body().innerHTML = `<div class="hrow"><h2>🧪 امتحان — ${esc(nm(EX.cfg.id))} (${EX.qs.length} سؤال · ${DIFF[EX.cfg.diff]})</h2>${EX.end ? `<b id="eTimer" class="timer"></b>` : ""}</div>
-      <ol class="exq">${EX.qs.map((x, i) => `<li data-i="${i}"><div class="qq">${md(x.q)} <small class="qt">${TYPES[x.type]}</small></div>${x.options ? `<div class="qo">${x.options.map((o, k) => `<label class="opt"><input type="radio" name="q${i}" value="${k}"${EX.ans[i] === k ? " checked" : ""}> <b>${L[k] || k + 1}</b> ${esc(o)}</label>`).join("")}</div>`
+    const L = LETS(EX.qs), N = EX.qs.length;
+    body().innerHTML = `<div class="hrow"><h2>🧪 امتحان — ${esc(nm(EX.cfg.id))} (${N} سؤال · ${DIFF[EX.cfg.diff] || ""})</h2>${EX.end ? `<b id="eTimer" class="timer"></b>` : ""}</div>
+      <div class="exbar"><span id="eProg"></span><div class="exnav">${EX.qs.map((_, i) => `<button type="button" data-j="${i}" title="سؤال ${i + 1}">${i + 1}</button>`).join("")}</div></div>
+      <ol class="exq">${EX.qs.map((x, i) => `<li data-i="${i}" id="exq${i}"><div class="qq" dir="auto">${md(x.q)} <small class="qt">${TYPES[x.type] || ""}</small><button type="button" class="qflag" data-f="${i}" title="علّم عليه عشان ترجعله">☆</button></div>${x.options ? `<div class="qo">${x.options.map((o, k) => `<label class="opt"><input type="radio" name="q${i}" value="${k}"${EX.ans[i] === k ? " checked" : ""}> <b>${L[k] || k + 1}</b> ${esc(o)}</label>`).join("")}</div>`
         : `<textarea rows="${x.type === "essay" || x.type === "math" ? 4 : 2}" placeholder="${x.type === "math" ? "اكتب الخطوات والناتج" : "إجابتك"}">${esc(EX.ans[i] || "")}</textarea>`}</li>`).join("")}</ol>
       <div class="row"><button type="button" id="eSubmit" class="accent">سلّم الامتحان</button><button type="button" id="eQuit" class="ghost">إلغاء</button></div>`;
     renderMath?.(body());
-    body().querySelector(".exq").addEventListener("input", e => { const li = e.target.closest("li"); if (!li) return; const i = +li.dataset.i; EX.ans[i] = e.target.type === "radio" ? +e.target.value : e.target.value; });
-    $("eSubmit").onclick = () => { const miss = EX.ans.filter(a => a == null || a === "").length; if (miss && !confirm(`فيه ${miss} سؤال من غير إجابة. تسلّم برضه؟`)) return; submitExam(); };
-    $("eQuit").onclick = () => { if (!confirm("تلغي الامتحان؟")) return; clearInterval(EX.timer); EX.qs = []; rExam(); };
-    if (EX.end) tick();
+    const done = i => EX.ans[i] != null && String(EX.ans[i]).trim() !== "";
+    const paint = () => { const n = EX.ans.filter((_, i) => done(i)).length; $("eProg").textContent = `جاوبت ${n} من ${N}`;
+      body().querySelectorAll(".exnav [data-j]").forEach(b => { const i = +b.dataset.j; b.classList.toggle("ok", done(i)); b.classList.toggle("fl", !!EX.flag[i]); });
+      body().querySelectorAll(".qflag").forEach(b => { const f = !!EX.flag[+b.dataset.f]; b.textContent = f ? "★" : "☆"; b.classList.toggle("on", f); }); };
+    body().querySelector(".exq").addEventListener("input", e => { const li = e.target.closest("li"); if (!li) return; const i = +li.dataset.i; EX.ans[i] = e.target.type === "radio" ? +e.target.value : e.target.value; paint(); saveEx(); });
+    body().querySelector(".exq").addEventListener("click", e => { const f = e.target.closest(".qflag"); if (!f) return; const i = +f.dataset.f; EX.flag[i] = !EX.flag[i]; paint(); saveEx(); });
+    body().querySelector(".exnav").onclick = e => { const b = e.target.closest("[data-j]"); if (b) $("exq" + b.dataset.j)?.scrollIntoView({ behavior: "smooth", block: "center" }); };
+    $("eSubmit").onclick = () => { const miss = EX.ans.filter(a => a == null || a === "").length, fl = EX.flag.filter(Boolean).length;
+      if ((miss || fl) && !confirm([miss ? `فيه ${miss} سؤال من غير إجابة.` : "", fl ? `وفيه ${fl} سؤال معلّم عليه عشان ترجعله.` : "", "تسلّم برضه؟"].filter(Boolean).join(" "))) return; submitExam(); };
+    $("eQuit").onclick = () => { if (!confirm("تلغي الامتحان؟")) return; clearInterval(EX.timer); EX.qs = []; saveEx(true); rExam(); };
+    paint(); if (EX.end) tick();
   }
-  async function submitExam() {
-    EX.done = true; clearInterval(EX.timer); if (!hub.hidden) body().innerHTML = `<div class="hload"><div class="spin"></div><p>بصحح إجاباتك…</p></div>`;
-    const R = EX.qs.map((x, i) => ({ x, a: EX.ans[i], v: null, fb: "" }));
-    R.forEach(r => { if (r.x.options) r.v = r.a === r.x.answer ? "correct" : "wrong"; else if (r.a == null || !String(r.a).trim()) { r.v = "wrong"; r.fb = "مفيش إجابة."; } });
+  // تصحيح الأسئلة المكتوبة: المطابقة الواضحة بتتصحح على طول، والباقي بالذكاء
+  async function gradeOpen(R) {
+    R.forEach(r => { if (!r.v && !r.x.options && (r.x.type === "fill" || r.x.type === "short") && sameAns(r.a, r.x.answer)) { r.v = "correct"; r.fb = ""; } });
     const open = R.map((r, i) => ({ r, i })).filter(o => !o.r.v);
-    if (open.length) {
-      try {
-        const g = await AI.structured({ tier: "smart", max: 250 * open.length + 300, temperature: 0.2, system: "إنت مدرّس بيصحح إجابات الطالب بدقة وعدل. الإجابة الصح بكلام تاني = correct. رجّع JSON بس.",
-          prompt: open.map(o => `#${o.i}\nالسؤال: ${o.r.x.q}\nالإجابة النموذجية: ${o.r.x.answer}\nإجابة الطالب: ${o.r.a}`).join("\n\n") + '\n\nرجّع: {"results":[{"i":رقم السؤال,"verdict":"correct"|"partial"|"wrong","feedback":"سطر: فين الغلط بالظبط أو إيه الناقص"}]}',
-          validate: j => { const v = (j?.results || []).filter(x => open.some(o => o.i === +x.i) && ["correct", "partial", "wrong"].includes(x.verdict)); return { value: v.length ? v : null, errors: v.length ? [] : ["مفيش نتايج صالحة لأرقام الأسئلة المطلوبة"] }; } });
-        g.value.forEach(x => { const o = open.find(o => o.i === +x.i); o.r.v = x.verdict; o.r.fb = String(x.feedback || ""); });
-      } catch (e) { toast("⚠️ مقدرتش أصحح الأسئلة المكتوبة دلوقتي (" + (errMsg(e) || "").slice(0, 80) + ")."); }
-    }
+    if (!open.length) return true;
+    try {
+      const g = await AI.structured({ tier: "smart", max: 250 * open.length + 300, temperature: 0.2, system: "إنت مدرّس بيصحح إجابات الطالب بدقة وعدل. الإجابة الصح بكلام تاني = correct. رجّع JSON بس.",
+        prompt: open.map(o => `#${o.i}\nالسؤال: ${o.r.x.q}\nالإجابة النموذجية: ${o.r.x.answer}\nإجابة الطالب: ${o.r.a}`).join("\n\n") + '\n\nرجّع: {"results":[{"i":رقم السؤال,"verdict":"correct"|"partial"|"wrong","feedback":"سطر: فين الغلط بالظبط أو إيه الناقص"}]}',
+        validate: j => { const v = (j?.results || []).filter(x => open.some(o => o.i === +x.i) && ["correct", "partial", "wrong"].includes(x.verdict)); return { value: v.length ? v : null, errors: v.length ? [] : ["مفيش نتايج صالحة لأرقام الأسئلة المطلوبة"] }; } });
+      g.value.forEach(x => { const o = open.find(o => o.i === +x.i); o.r.v = x.verdict; o.r.fb = String(x.feedback || ""); });
+      return true;
+    } catch (e) { toast("⚠️ مقدرتش أصحح الأسئلة المكتوبة دلوقتي (" + (errMsg(e) || "").slice(0, 80) + ")."); return false; }
+  }
+  function summarize(R) {
     const graded = R.filter(r => r.v), pts = graded.reduce((a, r) => a + (r.v === "correct" ? 1 : r.v === "partial" ? 0.5 : 0), 0);
     const topics = {}; graded.forEach(r => { const k = r.x.sec || "صفحة " + r.x.page, t = topics[k] ||= { name: k, page: r.x.page, right: 0, wrong: 0 }; r.v === "correct" ? t.right++ : t.wrong++; });
     const weakT = Object.values(topics).filter(t => t.wrong > 0).sort((a, b) => b.wrong - a.wrong);
-    EX.res = { R, pts, graded: graded.length, total: R.length, score: graded.length ? Math.round(100 * pts / graded.length) : 0, weakT, ungraded: R.length - graded.length };
+    return { R, pts, graded: graded.length, total: R.length, score: graded.length ? Math.round(100 * pts / graded.length) : 0, weakT, ungraded: R.length - graded.length };
+  }
+  const recQs = R => R.map(r => ({ id: r.x.id, type: r.x.type, q: r.x.q, options: r.x.options, correct: r.x.answer, answer: r.a, verdict: r.v || "ungraded", fb: r.fb || "", explain: r.x.explain || "", lesson: r.x.sec, page: r.x.page }));
+  async function submitExam() {
+    EX.done = true; clearInterval(EX.timer); saveEx(true); if (!hub.hidden) body().innerHTML = `<div class="hload"><div class="spin"></div><p>بصحح إجاباتك…</p></div>`;
+    const R = EX.qs.map((x, i) => ({ x, a: EX.ans[i], v: null, fb: "" }));
+    R.forEach(r => { if (r.x.options) r.v = r.a === r.x.answer ? "correct" : "wrong"; else if (r.a == null || !String(r.a).trim()) { r.v = "wrong"; r.fb = "مفيش إجابة."; } });
+    await gradeOpen(R);
+    EX.res = summarize(R); const secs = Math.round((Date.now() - EX.start) / 1000); EX.res.seconds = secs;
+    const graded = R.filter(r => r.v);
     await record(EX.cfg.id, graded.map(r => ({ topic: r.x.sec, page: r.x.page, ok: r.v === "correct", diff: EX.cfg.diff, q: r.x.q, src: "exam" })));
-    // سجل الامتحان كامل (من إجابات حقيقية بس): الأسئلة ومصادرها وإجابتك والصح والوقت
+    // سجل الامتحان كامل (من إجابات حقيقية بس): الأسئلة ومصادرها وإجابتك والصح والشرح والوقت
     const ex = await DB.get("exams", []);
-    ex.push({ id: EX.id || uid(), book: EX.cfg.id, date: Date.now(), startedAt: EX.start, seconds: Math.round((Date.now() - EX.start) / 1000), timeLimit: EX.cfg.minutes || 0,
-      chapters: [...new Set(EX.cfg.secs.map(s => s.label))], difficulty: EX.cfg.diff, types: EX.cfg.types, score: EX.res.score, right: pts, total: graded.length, ungraded: EX.res.ungraded,
-      weak: weakT.map(t => t.name), questions: R.map(r => ({ id: r.x.id, type: r.x.type, q: r.x.q, options: r.x.options, correct: r.x.answer, answer: r.a, verdict: r.v || "ungraded", lesson: r.x.sec, page: r.x.page })) });
-    await DB.set("exams", ex.slice(-50));
+    ex.push({ id: EX.id || uid(), book: EX.cfg.id, date: Date.now(), startedAt: EX.start, seconds: secs, timeLimit: EX.cfg.minutes || 0, retakeOf: EX.cfg.retakeOf || null,
+      chapters: [...new Set((EX.cfg.secs || []).map(s => s.label).filter(Boolean))], difficulty: EX.cfg.diff, types: EX.cfg.types, score: EX.res.score, right: EX.res.pts, total: EX.res.graded, ungraded: EX.res.ungraded,
+      weak: EX.res.weakT.map(t => t.name), questions: recQs(R) });
+    await DB.set("exams", ex.slice(-50)); EX.recId = ex[ex.length - 1].id;
     if (hub.hidden) S.open("exam"); else rReport();
+  }
+  // امتحان قديم من السجل: نفس شاشة النتيجة، ومنها تعيده أو تعيد اللي غلطت فيه بس
+  function showPast(rec) {
+    const R = (rec.questions || []).map(q => ({ x: { id: q.id, type: q.type, q: q.q, options: q.options, answer: q.correct, explain: q.explain, sec: q.lesson, page: q.page }, a: q.answer, v: q.verdict === "ungraded" ? null : q.verdict, fb: q.fb || "" }));
+    EX.qs = R.map(r => r.x); EX.done = true; EX.cfg = { id: rec.book, secs: (rec.chapters || []).map(l => ({ label: l })), diff: rec.difficulty, types: rec.types, minutes: rec.timeLimit };
+    EX.res = summarize(R); EX.res.seconds = rec.seconds; EX.res.date = rec.date; EX.recId = rec.id; rReport();
   }
   function rReport() {
     const X = EX.res, L = LETS(EX.qs), ans = r => r.x.options ? (r.a == null ? "—" : (L[r.a] || "") + " " + r.x.options[r.a]) : (r.a || "—");
     const right = r => r.x.options ? (L[r.x.answer] || "") + " " + r.x.options[r.x.answer] : r.x.answer;
-    body().innerHTML = `<div class="hrow"><h2>🏁 نتيجة الامتحان</h2><button type="button" id="eNew">امتحان جديد</button></div>
-      <div class="score"><b>${X.score}%</b><span>${X.pts} من ${X.graded} صح${X.ungraded ? ` · ${X.ungraded} سؤال ماتصححش (الذكاء مردّش)` : ""}</span></div>
+    const wrongN = X.R.filter(r => r.v && r.v !== "correct").length;
+    body().innerHTML = `<div class="hrow"><h2>🏁 نتيجة الامتحان${X.date ? ` <small>${dfmt(X.date)}</small>` : ""}</h2><button type="button" id="eNew">امتحان جديد</button></div>
+      <div class="score"><b>${X.score}%</b><span>${X.pts} من ${X.graded} صح${X.seconds != null ? ` · ⏱ ${fmtDur(X.seconds)}` : ""}${X.ungraded ? ` · ${X.ungraded} سؤال ماتصححش (الذكاء مردّش)` : ""}</span></div>
+      <div class="row exacts">${wrongN ? `<button type="button" id="eWrong" class="accent">🔁 أعد الأسئلة اللي غلطت فيها (${wrongN})</button>` : ""}<button type="button" id="eSame">🔁 أعد نفس الامتحان</button>${X.ungraded ? `<button type="button" id="eRegrade">✍️ صحّح الباقي تاني</button>` : ""}</div>
       ${X.weakT.length ? `<div class="weakbox"><h3>🎯 محتاج تراجع</h3>${X.weakT.map(t => `<div class="wrow"><span>${esc(t.name)} — غلطت ${t.wrong}${t.right ? " وجبت " + t.right : ""}</span><a href="#" data-go="${esc(EX.cfg.id)}|${t.page}">افتح ص ${t.page}</a><button type="button" class="ghost" data-pr="${esc(t.name)}" data-p="${t.page}">اتدرّب عليها</button></div>`).join("")}</div>` : `<p class="good">🎉 مفيش غلطات — ممتاز!</p>`}
-      <ol class="exr">${X.R.map(r => `<li class="${r.v || "ng"}"><div class="qq">${md(r.x.q)}</div><div>إجابتك: <b>${esc(String(ans(r)))}</b> ${r.v === "correct" ? "✅" : r.v === "partial" ? "🟡 ناقصة" : r.v === "wrong" ? "❌" : "⏳"}</div>
+      <ol class="exr">${X.R.map(r => `<li class="${r.v || "ng"}"><div class="qq" dir="auto">${md(r.x.q)}</div><div>إجابتك: <b>${esc(String(ans(r)))}</b> ${r.v === "correct" ? "✅" : r.v === "partial" ? "🟡 ناقصة" : r.v === "wrong" ? "❌" : "⏳"}</div>
         ${r.v !== "correct" ? `<div>الإجابة الصح: <b>${md(String(right(r)))}</b></div>` : ""}${r.fb ? `<div class="fb">${md(r.fb)}</div>` : ""}${r.x.explain ? `<div class="ex">💡 ${md(r.x.explain)}</div>` : ""}
         <small>📍 ${esc(r.x.sec || "")} · <a href="#" data-go="${esc(EX.cfg.id)}|${r.x.page}">ص ${r.x.page}</a></small></li>`).join("")}</ol>`;
     renderMath?.(body());
     $("eNew").onclick = () => { EX.qs = []; EX.res = null; rExam(); };
+    const rec = async () => (await DB.get("exams", [])).find(x => (x.id || "d" + x.date) === EX.recId);
+    if ($("eWrong")) $("eWrong").onclick = async () => { const r = await rec(); if (r) S.retake(r, true); };
+    $("eSame").onclick = async () => { const r = await rec(); if (r) S.retake(r, false); };
+    if ($("eRegrade")) $("eRegrade").onclick = async () => { $("eRegrade").disabled = true; $("eRegrade").textContent = "بصحح…"; if (await gradeOpen(X.R)) { const t = { seconds: X.seconds, date: X.date }; EX.res = Object.assign(summarize(X.R), t);
+      const ex = await DB.get("exams", []), r = ex.find(x => (x.id || "d" + x.date) === EX.recId); if (r) { Object.assign(r, { score: EX.res.score, right: EX.res.pts, total: EX.res.graded, ungraded: EX.res.ungraded, weak: EX.res.weakT.map(t => t.name), questions: recQs(X.R) }); await DB.set("exams", ex); } }
+      rReport(); };
     body().querySelectorAll("[data-pr]").forEach(b => b.onclick = () => S.practice(EX.cfg.id, b.dataset.pr, +b.dataset.p));
   }
   // تدريب مركّز على موضوع ضعيف: امتحان صغير من صفحات الموضوع ده بس

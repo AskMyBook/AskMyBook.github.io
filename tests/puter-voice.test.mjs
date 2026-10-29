@@ -25,12 +25,14 @@ try {
   const ctx = await b.newContext();
   await ctx.addInitScript(() => { localStorage.setItem("dev", "1"); });   // «تلقائي»: الاختبار ده عن Puter/كريم (صوت المتصفح الافتراضي ليه اختبار في regress)
   await ctx.route(/fonts\.(googleapis|gstatic)\.com|huggingface\.co|cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net|generativelanguage/, r => r.fulfill({ status: 404, body: "" }));
+  await ctx.route(/\/config\.js(\?|$)/, async r => { const res = await r.fetch(); r.fulfill({ response: res, body: (await res.text()).replace(/(proxyUrl|supabaseUrl|supabaseAnonKey): "[^"]*"/g, '$1: ""') }); });   // الاختبار ده من غير سيرفر ولا حسابات (الموقع الحقيقي متظبط في config.js)
   await ctx.route("https://js.puter.com/**", r => r.fulfill({ status: 200, headers: { "content-type": "text/javascript" }, body: STUB }));
   const page = await ctx.newPage(); page.on("pageerror", e => errs.push(e.message));
   await page.goto(`http://127.0.0.1:${port}/`); await sleep(700);
   const s0 = await page.evaluate(() => ({ cur: TTS.current()?.id, puterAvail: TTS.get("puter").available() }));
   ok("new student (not signed in to Puter): voice starts with in-browser Kareem, Puter skipped silently", s0.cur === "local" && !s0.puterAvail, s0);
   await page.click("#settingsBtn"); await sleep(600);
+  await page.evaluate(() => { $("vrow").hidden = false; $("vrow").style.setProperty("display", "flex", "important"); });   // قسم الصوت مستخبي في الإعدادات العامة (اختيار صاحب الموقع)؛ هنا بنختبر منطقه
   const st = await page.evaluate(() => ({ btn: !$("tsign").hidden, txt: $("vnow").innerText }));
   ok("settings: «سجّل دخول Puter» button + a clear hint about the natural voice", st.btn && /سجّل دخول Puter/.test(st.txt), st);
   await page.click("#tsign"); await sleep(500);
