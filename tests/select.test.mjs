@@ -37,7 +37,22 @@ async function run(book) {
   }
   await ctx.close(); return res;
 }
+// «📋 انسخ النص» من كتاب عربي اتعمل PDF من Chrome/Word: العربي جوه الملف حرف حرف وبترتيب الشاشة — لازم يتنسخ كلام مقروء
+async function copyArabic() {
+  const ctx = await b.newContext({ viewport: { width: 1300, height: 900 }, permissions: ["clipboard-read", "clipboard-write"] }), page = await ctx.newPage();
+  page.on("pageerror", e => errs.push(e.message));
+  await ctx.route(/fonts|youtube|ytimg|puter|cdnjs|jsdelivr|workers\.dev|mymemory|dictionaryapi|llm7|kepler|kilo|pollinations/, r => r.fulfill({ status: 404, body: "" }));
+  await page.addInitScript(() => localStorage.setItem("proxy", "/"));
+  await page.goto(`http://127.0.0.1:${port}/`); await sleep(900);
+  await page.setInputFiles("#files", [path.join(FX, "arabic-chrome.pdf")]); await sleep(3500);
+  const pg = page.locator("#pages .pg").first(); await pg.scrollIntoViewIfNeeded(); const pb = await pg.boundingBox();
+  await page.mouse.move(pb.x + pb.width * .97, pb.y + pb.height * .02); await page.mouse.down(); await page.mouse.move(pb.x + pb.width * .03, pb.y + pb.height * .16, { steps: 8 }); await page.mouse.up(); await sleep(300);
+  await page.click('#chip [data-k="copy"]'); await sleep(800);
+  const t = await page.evaluate(() => navigator.clipboard.readText()); await ctx.close(); return t;
+}
 try {
+  const cp = await copyArabic();
+  ok("copy from an Arabic PDF (letters stored one by one, screen order): real words in reading order", /الدرس الأول: قانون نيوتن الثاني/.test(cp) && /القوة تساوي الكتلة مضروبة في العجلة/.test(cp) && !/(?:^|\s)[\u0621-\u064A](?:\s[\u0621-\u064A]){3}/.test(cp), cp.slice(0, 200));
   calls.length = 0; const a = await run("newton.pdf");
   for (const [k, v] of Object.entries(a)) ok(`text book: «${k}» answers in the chat`, v && !/مقدرتش|خطأ|no button/.test(v), v);
   ok("text book: «نطق» reads the selected words", /🔊.*(Newton|law|Physics|Lesson)/i.test(a.say), a.say);

@@ -409,7 +409,7 @@ const latinQs = qs => localStorage.getItem("uiLang") === "en" || (qs || []).filt
   async function pagesOf(id) {   // نص كل صفحة: من الفهرس المحفوظ، وإلا من طبقة النص في الملف المفتوح
     const t = BK[id]?.t || (await idbGet("idx:" + id))?.t; if (t?.some(x => x && x.length > 20)) return t;
     const d = cur.id === id ? doc : null; if (!d) return null; const out = [];
-    for (let n = 1; n <= d.numPages; n++) { try { const tc = await (await d.getPage(n)).getTextContent(); out.push(tc.items.map(i => i.str).join(" ")); } catch { out.push(""); } }
+    for (let n = 1; n <= d.numPages; n++) { try { const tc = await (await d.getPage(n)).getTextContent(); out.push(window.tcText ? tcText(tc.items) : tc.items.map(i => i.str).join(" ")); } catch { out.push(""); } }
     return out;
   }
   S.search = async (q, ids) => {

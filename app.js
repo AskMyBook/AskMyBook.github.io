@@ -581,14 +581,14 @@ async function detectBookLang(id, around) {
   if (!id || BOOK_LANG[id]) return BOOK_LANG[id] || "";
   const d = docs[id] || (cur.id === id ? doc : null), b = BK[id], n = d?.numPages || b?.n || 0; let s = "";
   const want = [...new Set([around, 1, 2, 3, 5, 8, 13, 21, 34].filter(p => p && p <= n))];
-  for (const p of want) { let t = b?.t?.[p - 1] || ""; if (!t && d) { try { t = (await (await d.getPage(p)).getTextContent()).items.map(i => i.str).join(" "); } catch {} } s += " " + t; if (s.length > 6000) break; }
+  for (const p of want) { let t = b?.t?.[p - 1] || ""; if (!t && d) { try { t = tcText((await (await d.getPage(p)).getTextContent()).items); } catch {} } s += " " + t; if (s.length > 6000) break; }
   const l = langOfText(s); if (l) BOOK_LANG[id] = l; return l;
 }
 async function pageText(id, n) {
   const k = id + "|" + n; if (ptCache.has(k)) return ptCache.get(k);
   const b = BK[id]; let t = b?.t?.[n - 1] || "";   // الفهرس المحفوظ الأول (أسرع)
   const d = docs[id] || (cur.id === id ? doc : null) || await loadDoc(id);
-  if (!okText(t) && d) { try { const tc = await (await d.getPage(n)).getTextContent(); t = tc.items.map(i => i.str + (i.hasEOL ? "\n" : " ")).join(""); } catch {} }
+  if (!okText(t) && d) { try { const tc = await (await d.getPage(n)).getTextContent(); t = tcText(tc.items); } catch {} }
   if (!okText(t)) { const p = pages.find(x => x.id === id && x.page === n); if (p && p.text) t = p.text; }
   let ocr = false; if (!okText(t) && d) { t = await ocrPage(id, n, d); ocr = true; }
   t = t.normalize("NFKC").replace(/[\u200e\u200f]/g, "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
@@ -600,6 +600,29 @@ async function pageText(id, n) {
 // الخطوات: (١) قراءة سريعة لطبقة النص في الـ PDF لكل الصفحات  (٢) لو الكتاب صور: زرار «ذاكر الكتاب» بيقرا الباقي بالـ OCR في الخلفية
 // والنتيجة بتتحفظ في المتصفح (IndexedDB) فمش بتتعاد. (٣) وقت السؤال بندوّر (BM25) في الكتاب كله ونبعت للـ AI أقرب الصفحات.
 const BK = {};
+// ===== نص الصفحة من طبقة النص (pdf.js) بترتيب القراية الصح =====
+// ملفات PDF كتير (زي اللي بيطلّعها Chrome وWord) بتحط العربي حرف حرف وبترتيب الشاشة من الشمال لليمين،
+// فلو لزقنا العناصر ورا بعض بيطلع «ي ن ا ث ل ا» بدل «الثاني». هنا بنجمّع كل سطر، ونرتّبه يمين←شمال لو عربي
+// (والكلام الإنجليزي/الأرقام جواه بيفضل شمال←يمين)، ونحط مسافة بس لما يكون فيه فراغ حقيقي بين الكلمات.
+const AR_CH = /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/g, LAT_CH = /[A-Za-z0-9\u00C0-\u024F]/g;
+function tcText(items) {
+  const it = (items || []).filter(i => i && typeof i.str === "string" && i.str.trim() && i.transform).map(i => { const t = i.transform, fh = Math.hypot(t[2], t[3]) || Math.abs(i.height) || 8;
+    return { s: i.str, x0: Math.min(t[4], t[4] + (i.width || 0)), x1: Math.max(t[4], t[4] + (i.width || 0)), y: t[5], fh }; });
+  if (!it.length) return "";
+  const lines = [];
+  for (const o of it.slice().sort((a, b) => b.y - a.y)) { const L = lines.at(-1); if (L && Math.abs(L.y - o.y) < 0.5 * Math.min(L.fh, o.fh)) L.a.push(o); else lines.push({ y: o.y, fh: o.fh, a: [o] }); }
+  const isAr = o => AR_CH.test(o.s) && !(AR_CH.lastIndex = 0), isLtr = o => !isAr(o) && LAT_CH.test(o.s) && !(LAT_CH.lastIndex = 0), neutral = o => !isAr(o) && !isLtr(o);
+  return lines.map(L => {
+    const a = L.a, txt = a.map(o => o.s).join(""), ar = (txt.match(AR_CH) || []).length, la = (txt.match(LAT_CH) || []).length, rtl = ar > la;
+    a.sort((p, q) => p.x0 - q.x0); if (rtl) { a.reverse();
+      for (let k = 0; k < a.length; k++) if (isLtr(a[k])) { let j = k; while (j + 1 < a.length && (isLtr(a[j + 1]) || (neutral(a[j + 1]) && j + 2 < a.length && isLtr(a[j + 2])))) j++;
+        const run = a.slice(k, j + 1).reverse(); a.splice(k, run.length, ...run); k = j; } }
+    let out = "", prev = null;
+    for (const o of a) { if (prev) { const gap = Math.max(o.x0 - prev.x1, prev.x0 - o.x1); if (gap > 0.22 * Math.min(prev.fh, o.fh) && !/\s$/.test(out) && !/^\s/.test(o.s)) out += " "; } out += o.s; prev = o; }
+    return out.trim();
+  }).filter(Boolean).join("\n");
+}
+window.tcText = tcText;
 const bkClean = t => (t || "").normalize("NFKC").replace(/[\u200e\u200f]/g, "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
 const tick = ms => new Promise(r => setTimeout(r, ms));
 function bkIndex(b) {
@@ -690,7 +713,7 @@ async function bkQuick(id, d, b) {   // قراءة طبقة النص (سريعة
   for (let i = 1; i <= b.n; i++) {
     if (b.s[i - 1] && !(redo && b.s[i - 1] === 1)) continue;
     try {
-      const tc = await (await d.getPage(i)).getTextContent(), t = bkClean(tc.items.map(x => x.str + (x.hasEOL ? "\n" : " ")).join(""));
+      const tc = await (await d.getPage(i)).getTextContent(), t = bkClean(tcText(tc.items));
       if (okText(t)) { b.t[i - 1] = t; b.s[i - 1] = 1; b.h[i - 1] = pageHeads(tc); ch = true; }
       else if (!b.s[i - 1]) { const p = pages.find(x => x.id === id && x.page === i); if (p?.text && okText(p.text)) { b.t[i - 1] = bkClean(p.text); b.s[i - 1] = 1; ch = true; } }
     } catch {}
@@ -867,8 +890,8 @@ async function bandContext(spec, n) {
       return { i, big: i.str.length > 160 || fh > 0.12 * v.height, cy: (m[5] - fh / 2) / v.height }; });
     const sel = all.filter(o => o.cy >= y0 && o.cy <= y1), total = all.reduce((a, o) => a + o.i.str.length, 0), got = sel.reduce((a, o) => a + o.i.str.length, 0);
     if (!sel.some(o => o.big) && !(total > 0 && got > 0.6 * total) && got > 8) {
-      t = sel.map(o => o.i.str + (o.i.hasEOL ? "\n" : " ")).join("");
-      target = all.filter(o => Math.abs(o.cy - spec.y) <= BAND * 0.8).map(o => o.i.str).join(" ").trim();
+      t = tcText(sel.map(o => o.i));
+      target = tcText(all.filter(o => Math.abs(o.cy - spec.y) <= BAND * 0.8).map(o => o.i)).replace(/\n/g, " ").trim();
     }
   } catch {}
   if (t.replace(/\s/g, "").length < 8) {
@@ -1121,7 +1144,8 @@ ${GEN}
 async function ocrImg(id, dataUrl) {
   try {
     if (!window.Tesseract) await loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js");
-    const lang = bookLang(id); ocrW[lang] ||= Tesseract.createWorker(lang);
+    // الجزء المحدد صغير: لو لغة الكتاب متخمّنة (من اسم الملف) بنقرا عربي + إنجليزي مع بعض — عشان كتاب إنجليزي اسمه عربي مايطلعش حروف عربي غريبة (والعكس)
+    const e = LIB.find(x => x.id === id), lang = e?.langSet ? bookLang(id) : "ara+eng"; ocrW[lang] ||= Tesseract.createWorker(lang);
     return ((await (await ocrW[lang]).recognize(dataUrl)).data.text) || "";
   } catch (e) { console.warn("OCR", e); return ""; }
 }
@@ -1136,7 +1160,7 @@ async function regionText(spec, n, img, { ocr = true } = {}) {
     const sel = all.filter(inR), total = all.reduce((a, o) => a + o.i.str.length, 0), got = sel.reduce((a, o) => a + o.i.str.length, 0), area = spec.type === "rect" ? (spec.x1 - spec.x0) * (spec.y1 - spec.y0) : 0.05;
     // لو طبقة النص كبيرة القطع (سطر/فقرة كاملة) أو المحدد أخد معظم الصفحة، مينفعش نقص بالمكان → OCR للصورة المقصوصة
     const coarse = sel.some(o => o.big) || (total > 0 && got > 0.6 * total && area < 0.45);
-    layer = sel.map(o => o.i.str + (o.i.hasEOL ? "\n" : " ")).join(""); if (!coarse) t = layer;
+    layer = tcText(sel.map(o => o.i)); if (!coarse) t = layer;
   } catch {}
   if (t.replace(/\s/g, "").length < 6 && ocr) { setTyping("🔎 بقرا الجزء المحدد (OCR)..."); try { t = await ocrImg(cur.id, img); } catch (e) { console.warn("ocr", e); t = ""; } }
   if (t.replace(/\s/g, "").length < 6 && layer.replace(/\s/g, "").length >= 4) t = layer;   // الـ OCR ماشتغلش: نص الكتاب نفسه أحسن من مفيش
